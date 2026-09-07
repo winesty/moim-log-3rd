@@ -14,7 +14,7 @@
   CSV로 내보내 업로드하면 장소와 메뉴 버전으로 자동 변환합니다. 헤더는
   `startDate, storeName, city, gu, street, tel, Category, menu, price, discount, remark` 를 사용합니다.
   같은 장소명+주소로 여러 행이 있으면 장소는 한 번만 만들고, 각 행은 그 장소의 메뉴 버전 하나씩으로
-  쌓입니다.
+  쌓입니다. 
 
 ## 데이터 모델
 - `Person` (참석자): 이름 + 나이/학력/가족관계/커리어/회사및직함/주요Network/취미/기타
