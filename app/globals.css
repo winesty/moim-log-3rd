@@ -1,0 +1,34 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  background-color: #faf8f3;
+  color: #2b2a26;
+}
+
+input,
+select,
+textarea {
+  border: 1px solid #ddd8ca;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: white;
+  font-size: 14px;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: 2px solid #b4622f;
+  outline-offset: 1px;
+}
+
+button {
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+details > summary {
+  cursor: pointer;
+}
