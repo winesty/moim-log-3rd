@@ -50,6 +50,11 @@ export default function SearchPage() {
               </Link>
               {[m.place?.city, m.place?.gu].filter(Boolean).length > 0 && ` · ${[m.place?.city, m.place?.gu].filter(Boolean).join(" ")}`}
             </p>
+            {m.orderedItems && m.orderedItems.length > 0 && (
+              <p className="text-xs text-[#a09c8c] mb-1">
+                주문: {m.orderedItems.map((it) => `${it.name} x${it.quantity}`).join(", ")}
+              </p>
+            )}
             <p className="text-sm text-[#7a7768] mb-2">
               {m.attendees.map((a, i) => (
                 <span key={a.id}>

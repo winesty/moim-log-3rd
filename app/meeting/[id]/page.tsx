@@ -21,9 +21,15 @@ export default async function MeetingDetailPage({ params }: { params: { id: stri
       <h1 className="text-xl font-medium mb-1">
         {meeting.date} {meeting.time}
       </h1>
-      <p className="text-sm text-[#7a7768] mb-4">
+      <p className="text-sm text-[#7a7768] mb-1">
         {place?.name} · {attendees.map((a) => a.name).join(", ")}
       </p>
+      {meeting.orderedItems && meeting.orderedItems.length > 0 && (
+        <p className="text-sm text-[#a09c8c] mb-1">
+          주문: {meeting.orderedItems.map((it) => `${it.name} x${it.quantity}${it.price ? `(${it.price.toLocaleString()}원)` : ""}`).join(", ")}
+        </p>
+      )}
+      {meeting.amount != null && <p className="text-sm text-[#a09c8c] mb-4">금액: {meeting.amount.toLocaleString()}원</p>}
 
       <div className="flex flex-col gap-2 mb-6">
         {meeting.stories.map((s) => {
