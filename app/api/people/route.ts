@@ -5,10 +5,12 @@ import { nanoid } from "nanoid";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const storage = await getStorage();
+  const q = req.nextUrl.searchParams.get("q")?.trim().toLowerCase();
   const people = await storage.listPeople();
-  return NextResponse.json(people);
+  const filtered = q ? people.filter((p) => p.name.toLowerCase().includes(q)) : people;
+  return NextResponse.json(filtered);
 }
 
 export async function POST(req: NextRequest) {

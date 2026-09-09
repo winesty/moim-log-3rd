@@ -26,6 +26,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Link href="/places" className="text-[#2b2a26] no-underline hover:text-[#b4622f]">
                 장소
               </Link>
+              <Link href="/people" className="text-[#2b2a26] no-underline hover:text-[#b4622f]">
+                사람
+              </Link>
             </nav>
           </header>
           <main className="py-6">{children}</main>

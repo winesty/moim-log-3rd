@@ -1,8 +1,10 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import Script from "next/script";
 import { getStorage } from "@/lib/storage";
 import { latestMenuSnapshot, pastMenuSnapshots } from "@/lib/storage/searchHelper";
 import AddMenuSnapshotForm from "@/components/AddMenuSnapshotForm";
+import PlaceEditForm from "@/components/PlaceEditForm";
 
 export const dynamic = "force-dynamic";
 
@@ -20,11 +22,15 @@ export default async function PlaceDetailPage({ params }: { params: { id: string
 
   return (
     <div>
+      <Script src="https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js" strategy="afterInteractive" />
       <h1 className="text-xl font-medium mb-1">{place.name}</h1>
       <p className="text-sm text-[#7a7768] mb-1">{[place.city, place.gu, place.street].filter(Boolean).join(" ") || "주소 미등록"}</p>
-      <p className="text-sm text-[#7a7768] mb-6">
+      <p className="text-sm text-[#7a7768] mb-2">
         {place.tel || "전화번호 미등록"} {place.category ? `· ${place.category}` : ""}
       </p>
+      <div className="mb-6">
+        <PlaceEditForm place={place} />
+      </div>
 
       <div className="bg-white border border-[#ddd8ca] rounded-xl p-4 mb-4">
         <p className="text-xs text-[#a09c8c] mb-2">현재 메뉴 {currentMenu ? `(${currentMenu.effectiveDate} 기준)` : ""}</p>

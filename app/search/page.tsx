@@ -50,7 +50,16 @@ export default function SearchPage() {
               </Link>
               {[m.place?.city, m.place?.gu].filter(Boolean).length > 0 && ` · ${[m.place?.city, m.place?.gu].filter(Boolean).join(" ")}`}
             </p>
-            <p className="text-sm text-[#7a7768] mb-2">{m.attendees.map((a) => a.name).join(", ")}</p>
+            <p className="text-sm text-[#7a7768] mb-2">
+              {m.attendees.map((a, i) => (
+                <span key={a.id}>
+                  {i > 0 && ", "}
+                  <Link href={`/people/${a.id}`} className="text-[#b4622f]">
+                    {a.name}
+                  </Link>
+                </span>
+              ))}
+            </p>
 
             {m.attendees.map((person) => {
               const stories = m.stories.filter((s) => s.personId === person.id);
