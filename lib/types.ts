@@ -75,6 +75,12 @@ export interface StoryEntry {
   createdAt: string;
 }
 
+export interface OrderedItem {
+  name: string;
+  price?: number;
+  quantity: number;
+}
+
 export interface Meeting {
   id: ID;
   date: string;
@@ -82,6 +88,7 @@ export interface Meeting {
   placeId: ID;
   attendeeIds: ID[];
   amount?: number;
+  orderedItems?: OrderedItem[];
   stories: StoryEntry[];
   createdAt: string;
   updatedAt: string;
