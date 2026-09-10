@@ -121,6 +121,14 @@ export default function MeetingForm({
     setNewPlaceName("");
   }
 
+  async function deleteSelectedPlace() {
+    if (!selectedPlace) return;
+    if (!confirm(`"${selectedPlace.name}"을(를) 삭제할까요? 메뉴 이력도 함께 사라집니다.`)) return;
+    await fetch(`/api/places/${selectedPlace.id}`, { method: "DELETE" });
+    setPlaces((prev) => prev.filter((p) => p.id !== selectedPlace.id));
+    setPlaceId("");
+  }
+
   function addAttendeeFromPick() {
     if (!attendeePick || attendeeIds.includes(attendeePick)) return;
     setAttendeeIds((prev) => [...prev, attendeePick]);
@@ -273,7 +281,17 @@ export default function MeetingForm({
 
         {selectedPlace && (
           <div className="mt-2 p-3 bg-[#faf8f3] rounded-lg text-sm text-[#7a7768]">
-            {addressOf(selectedPlace) && <div className="mb-2">주소: {addressOf(selectedPlace)}</div>}
+            <div className="flex items-center justify-between mb-2">
+              {addressOf(selectedPlace) ? <div>주소: {addressOf(selectedPlace)}</div> : <div />}
+              <div className="flex gap-2 text-xs">
+                <button type="button" onClick={() => setPlaceId("")} className="text-[#7a7768] bg-transparent p-0">
+                  선택 해제
+                </button>
+                <button type="button" onClick={deleteSelectedPlace} className="text-[#a34a3a] bg-transparent p-0">
+                  이 장소 삭제
+                </button>
+              </div>
+            </div>
 
             <p className="text-xs font-medium text-[#2b2a26] mb-1">메뉴 주문 (수량 선택 시 금액 자동 계산)</p>
             {currentMenu && currentMenu.items.length > 0 ? (
