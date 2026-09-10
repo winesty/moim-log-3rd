@@ -1,6 +1,9 @@
 import { getStorage } from "@/lib/storage";
 import { notFound } from "next/navigation";
 import AddStoryForm from "@/components/AddStoryForm";
+import AddOrderedItemForm from "@/components/AddOrderedItemForm";
+import DeleteMeetingButton from "@/components/DeleteMeetingButton";
+import { latestMenuSnapshot } from "@/lib/storage/searchHelper";
 
 export const dynamic = "force-dynamic";
 
@@ -9,18 +12,23 @@ export default async function MeetingDetailPage({ params }: { params: { id: stri
   const meeting = await storage.getMeeting(params.id);
   if (!meeting) notFound();
 
-  const [place, people, categories] = await Promise.all([
+  const [place, people, categories, menuSnapshots] = await Promise.all([
     storage.getPlace(meeting.placeId),
     storage.listPeople(),
     storage.listCategories(),
+    storage.listMenuSnapshots(meeting.placeId),
   ]);
   const attendees = people.filter((p) => meeting.attendeeIds.includes(p.id));
+  const currentMenu = latestMenuSnapshot(menuSnapshots, meeting.placeId);
 
   return (
     <div>
-      <h1 className="text-xl font-medium mb-1">
-        {meeting.date} {meeting.time}
-      </h1>
+      <div className="flex items-start justify-between mb-1">
+        <h1 className="text-xl font-medium">
+          {meeting.date} {meeting.time}
+        </h1>
+        <DeleteMeetingButton meetingId={meeting.id} />
+      </div>
       <p className="text-sm text-[#7a7768] mb-1">
         {place?.name} · {attendees.map((a) => a.name).join(", ")}
       </p>
@@ -31,7 +39,7 @@ export default async function MeetingDetailPage({ params }: { params: { id: stri
       )}
       {meeting.amount != null && <p className="text-sm text-[#a09c8c] mb-4">금액: {meeting.amount.toLocaleString()}원</p>}
 
-      <div className="flex flex-col gap-2 mb-6">
+      <div className="flex flex-col gap-2 mb-2">
         {meeting.stories.map((s) => {
           const person = attendees.find((a) => a.id === s.personId);
           return (
@@ -46,6 +54,7 @@ export default async function MeetingDetailPage({ params }: { params: { id: stri
       </div>
 
       <AddStoryForm meetingId={meeting.id} attendees={attendees} categories={categories} />
+      {place && <AddOrderedItemForm meetingId={meeting.id} currentMenu={currentMenu} />}
     </div>
   );
 }

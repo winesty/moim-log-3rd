@@ -21,3 +21,9 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
     meetings,
   });
 }
+
+export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+  const storage = await getStorage();
+  await storage.deletePlace(params.id);
+  return NextResponse.json({ ok: true });
+}

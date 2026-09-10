@@ -20,6 +20,12 @@ export default function PlacesPage() {
     load();
   }, []);
 
+  async function remove(p: Place) {
+    if (!confirm(`"${p.name}"을(를) 삭제할까요? 이 장소의 메뉴 이력도 함께 사라집니다. (이 장소가 연결된 모임 기록은 남아있지만 장소 정보가 비어보일 수 있어요)`)) return;
+    await fetch(`/api/places/${p.id}`, { method: "DELETE" });
+    load(q);
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
@@ -51,8 +57,8 @@ export default function PlacesPage() {
 
       <ul className="flex flex-col gap-2">
         {places.map((p) => (
-          <li key={p.id}>
-            <Link href={`/places/${p.id}`} className="block border border-[#ddd8ca] rounded-lg p-3 bg-white no-underline text-[#2b2a26]">
+          <li key={p.id} className="border border-[#ddd8ca] rounded-lg p-3 bg-white flex items-center gap-2">
+            <Link href={`/places/${p.id}`} className="flex-1 no-underline text-[#2b2a26]">
               <div className="flex justify-between items-center">
                 <span className="font-medium">{p.name}</span>
                 {p.operatingStatus === "closed_suspected" && (
@@ -64,6 +70,13 @@ export default function PlacesPage() {
                 {p.category ? ` · ${p.category}` : ""}
               </p>
             </Link>
+            <button
+              type="button"
+              onClick={() => remove(p)}
+              className="text-xs px-2 py-1.5 border border-[#e0b3a3] text-[#a34a3a] bg-white whitespace-nowrap"
+            >
+              삭제
+            </button>
           </li>
         ))}
       </ul>
