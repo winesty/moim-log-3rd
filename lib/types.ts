@@ -81,21 +81,35 @@ export interface OrderedItem {
   quantity: number;
 }
 
+/**
+ * 모임의 "한 차수"(1차/2차/3차 등). 같은 모임(같은 날, 같은 참석자)이
+ * 장소를 옮겨가며 이어질 수 있어, 장소/메뉴/금액을 차수 단위로 따로 관리한다.
+ */
+export interface Stop {
+  id: ID;
+  label: string; // "1차", "2차" 등. 사용자가 직접 바꿀 수도 있음
+  placeId: ID;
+  amount?: number;
+  orderedItems?: OrderedItem[];
+}
+
 export interface Meeting {
   id: ID;
   date: string;
   time?: string;
-  placeId: ID;
   attendeeIds: ID[];
-  amount?: number;
-  orderedItems?: OrderedItem[];
+  stops: Stop[]; // 최소 1개
   stories: StoryEntry[];
   createdAt: string;
   updatedAt: string;
 }
 
-export interface MeetingSearchResult extends Meeting {
-  place: Place;
+export interface StopWithPlace extends Stop {
+  place: Place | null;
+}
+
+export interface MeetingSearchResult extends Omit<Meeting, "stops"> {
+  stops: StopWithPlace[];
   attendees: Person[];
 }
 

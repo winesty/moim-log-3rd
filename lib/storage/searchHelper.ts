@@ -39,11 +39,10 @@ export function searchMeetingsInMemory(
   const q = query.q?.trim().toLowerCase();
 
   const matches = meetings.filter((m) => {
-    const place = placesById.get(m.placeId);
     const attendees = m.attendeeIds.map((id) => peopleById.get(id)).filter(Boolean) as Person[];
 
     if (query.personId && !m.attendeeIds.includes(query.personId)) return false;
-    if (query.placeId && m.placeId !== query.placeId) return false;
+    if (query.placeId && !m.stops.some((s) => s.placeId === query.placeId)) return false;
     if (query.dateFrom && m.date < query.dateFrom) return false;
     if (query.dateTo && m.date > query.dateTo) return false;
     if (query.categoryId) {
@@ -52,17 +51,19 @@ export function searchMeetingsInMemory(
     }
 
     if (q) {
-      const menu = place ? latestMenuSnapshot(menuSnapshots, place.id) : null;
-      const haystack = [
-        m.date,
-        place?.name,
-        place?.city,
-        place?.gu,
-        place?.street,
-        ...(menu?.items.map((i) => i.name) ?? []),
-        ...attendees.map((a) => a.name),
-        ...m.stories.map((s) => s.content),
-      ]
+      const placeFields = m.stops.flatMap((s) => {
+        const place = placesById.get(s.placeId);
+        const menu = place ? latestMenuSnapshot(menuSnapshots, place.id) : null;
+        return [
+          place?.name,
+          place?.city,
+          place?.gu,
+          place?.street,
+          ...(menu?.items.map((i) => i.name) ?? []),
+          ...(s.orderedItems?.map((i) => i.name) ?? []),
+        ];
+      });
+      const haystack = [m.date, ...placeFields, ...attendees.map((a) => a.name), ...m.stories.map((s) => s.content)]
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
@@ -75,10 +76,9 @@ export function searchMeetingsInMemory(
   return matches
     .map((m) => ({
       ...m,
-      place: placesById.get(m.placeId)!,
+      stops: m.stops.map((s) => ({ ...s, place: placesById.get(s.placeId) ?? null })),
       attendees: m.attendeeIds.map((id) => peopleById.get(id)).filter(Boolean) as Person[],
     }))
-    .filter((m) => m.place)
     .sort((a, b) => (a.date < b.date ? 1 : -1));
 }
 

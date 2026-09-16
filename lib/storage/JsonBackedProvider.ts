@@ -30,6 +30,33 @@ export const DEFAULT_CATEGORIES: Omit<StoryCategory, "id" | "createdAt">[] = [
   { label: "기타", isDefault: true },
 ];
 
+/**
+ * v2 이전에 저장된 모임 기록(장소 하나, placeId/amount/orderedItems가
+ * 최상위에 있던 구조)을 읽을 때, 현재의 stops 배열 구조로 즉시 변환한다.
+ * 이미 stops가 있는 최신 기록은 그대로 통과시킨다.
+ */
+function normalizeMeeting(raw: any): Meeting {
+  if (Array.isArray(raw.stops)) return raw as Meeting;
+  return {
+    id: raw.id,
+    date: raw.date,
+    time: raw.time,
+    attendeeIds: raw.attendeeIds ?? [],
+    stops: [
+      {
+        id: `${raw.id}-legacy-stop`,
+        label: "1차",
+        placeId: raw.placeId,
+        amount: raw.amount,
+        orderedItems: raw.orderedItems,
+      },
+    ],
+    stories: raw.stories ?? [],
+    createdAt: raw.createdAt,
+    updatedAt: raw.updatedAt,
+  };
+}
+
 export abstract class JsonBackedProvider implements StorageProvider {
   protected abstract readFile<T>(filename: string): Promise<T[]>;
   protected abstract writeFile<T>(filename: string, data: T[]): Promise<void>;
@@ -139,8 +166,9 @@ export abstract class JsonBackedProvider implements StorageProvider {
   }
 
   // --- Meeting ---
-  listMeetings() {
-    return this.readFile<Meeting>(FILES.meetings);
+  async listMeetings() {
+    const raw = await this.readFile<any>(FILES.meetings);
+    return raw.map(normalizeMeeting);
   }
   async getMeeting(id: string) {
     const all = await this.listMeetings();
