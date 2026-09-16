@@ -1,11 +1,70 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Person, Place, StoryCategory, MenuSnapshot } from "@/lib/types";
 
 type StoryDraft = { tempId: string; personId: string; content: string };
+type OrderRow = { name: string; price: string; qty: string };
+type StopDraft = {
+  tempId: string;
+  label: string;
+  placeId: string;
+  showNewPlace: boolean;
+  newPlaceName: string;
+  currentMenu: MenuSnapshot | null;
+  orderQty: Record<string, string>;
+  newOrderRows: OrderRow[];
+  amount: string;
+};
+
+function makeStopDraft(label: string): StopDraft {
+  return {
+    tempId: crypto.randomUUID(),
+    label,
+    placeId: "",
+    showNewPlace: false,
+    newPlaceName: "",
+    currentMenu: null,
+    orderQty: {},
+    newOrderRows: [],
+    amount: "",
+  };
+}
+
+function computeStopTotal(stop: Pick<StopDraft, "currentMenu" | "orderQty" | "newOrderRows">): number {
+  let total = 0;
+  if (stop.currentMenu) {
+    for (const item of stop.currentMenu.items) {
+      const qty = Number(stop.orderQty[item.id] || 0);
+      if (qty > 0 && item.price) total += item.price * qty;
+    }
+  }
+  for (const row of stop.newOrderRows) {
+    const qty = Number(row.qty || 0);
+    const price = Number(row.price || 0);
+    if (qty > 0 && price > 0) total += price * qty;
+  }
+  return total;
+}
+
+function buildOrderedItemsForStop(stop: StopDraft) {
+  const items: { name: string; price?: number; quantity: number }[] = [];
+  if (stop.currentMenu) {
+    for (const item of stop.currentMenu.items) {
+      const qty = Number(stop.orderQty[item.id] || 0);
+      if (qty > 0) items.push({ name: item.name, price: item.price, quantity: qty });
+    }
+  }
+  for (const row of stop.newOrderRows) {
+    const qty = Number(row.qty || 0);
+    if (qty > 0 && row.name.trim()) {
+      items.push({ name: row.name.trim(), price: row.price ? Number(row.price) : undefined, quantity: qty });
+    }
+  }
+  return items;
+}
 
 export default function MeetingForm({
   initialPeople,
@@ -24,14 +83,9 @@ export default function MeetingForm({
 
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [time, setTime] = useState("19:00");
-  const [amount, setAmount] = useState<string>("");
 
-  const [placeId, setPlaceId] = useState("");
-  const [showNewPlace, setShowNewPlace] = useState(false);
-  const [newPlaceName, setNewPlaceName] = useState("");
-  const [currentMenu, setCurrentMenu] = useState<MenuSnapshot | null>(null);
-  const [orderQty, setOrderQty] = useState<Record<string, string>>({});
-  const [newOrderRows, setNewOrderRows] = useState<{ name: string; price: string; qty: string }[]>([]);
+  const [stops, setStops] = useState<StopDraft[]>([makeStopDraft("1차")]);
+  const [activeStopIdx, setActiveStopIdx] = useState(0);
 
   const [attendeeIds, setAttendeeIds] = useState<string[]>([]);
   const [attendeePick, setAttendeePick] = useState("");
@@ -41,92 +95,73 @@ export default function MeetingForm({
   const [newCategoryLabel, setNewCategoryLabel] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const selectedPlace = places.find((p) => p.id === placeId) ?? null;
-
-  // 장소 선택 시 현재 메뉴 불러오기 (+ 주문 수량 초기화)
-  useEffect(() => {
-    setOrderQty({});
-    setNewOrderRows([]);
-    if (!placeId) {
-      setCurrentMenu(null);
-      return;
-    }
-    fetch(`/api/places/${placeId}`)
-      .then((res) => res.json())
-      .then((data) => setCurrentMenu(data.currentMenu ?? null))
-      .catch(() => setCurrentMenu(null));
-  }, [placeId]);
-
-  function computeOrderTotal(): number {
-    let total = 0;
-    if (currentMenu) {
-      for (const item of currentMenu.items) {
-        const qty = Number(orderQty[item.id] || 0);
-        if (qty > 0 && item.price) total += item.price * qty;
-      }
-    }
-    for (const row of newOrderRows) {
-      const qty = Number(row.qty || 0);
-      const price = Number(row.price || 0);
-      if (qty > 0 && price > 0) total += price * qty;
-    }
-    return total;
+  function updateStop(idx: number, patch: Partial<StopDraft>) {
+    setStops((prev) => prev.map((s, i) => (i === idx ? { ...s, ...patch } : s)));
   }
 
-  const orderTotal = computeOrderTotal();
-
-  // 메뉴 주문 수량이 바뀌면 금액을 자동으로 채워준다 (직접 수정도 계속 가능)
-  useEffect(() => {
-    if (orderTotal > 0) setAmount(String(orderTotal));
-  }, [orderTotal]);
-
-  function addNewOrderRow() {
-    setNewOrderRows((prev) => [...prev, { name: "", price: "", qty: "1" }]);
-  }
-  function updateNewOrderRow(idx: number, patch: Partial<{ name: string; price: string; qty: string }>) {
-    setNewOrderRows((prev) => prev.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
-  }
-  function removeNewOrderRow(idx: number) {
-    setNewOrderRows((prev) => prev.filter((_, i) => i !== idx));
+  function addStop() {
+    setStops((prev) => {
+      const next = [...prev, makeStopDraft(`${prev.length + 1}차`)];
+      setActiveStopIdx(next.length - 1);
+      return next;
+    });
   }
 
-  function buildOrderedItems() {
-    const items: { name: string; price?: number; quantity: number }[] = [];
-    if (currentMenu) {
-      for (const item of currentMenu.items) {
-        const qty = Number(orderQty[item.id] || 0);
-        if (qty > 0) items.push({ name: item.name, price: item.price, quantity: qty });
-      }
-    }
-    for (const row of newOrderRows) {
-      const qty = Number(row.qty || 0);
-      if (qty > 0 && row.name.trim()) {
-        items.push({ name: row.name.trim(), price: row.price ? Number(row.price) : undefined, quantity: qty });
-      }
-    }
-    return items;
+  function removeStop(idx: number) {
+    if (stops.length <= 1) return;
+    if (!confirm(`"${stops[idx].label}"를 이 모임에서 뺄까요?`)) return;
+    setStops((prev) => prev.filter((_, i) => i !== idx));
+    setActiveStopIdx((prev) => Math.max(0, prev >= idx ? prev - 1 : prev));
   }
 
-  async function addPlace() {
-    if (!newPlaceName.trim()) return;
+  async function selectPlaceForStop(idx: number, newPlaceId: string) {
+    updateStop(idx, { placeId: newPlaceId, orderQty: {}, newOrderRows: [], currentMenu: null, amount: "" });
+    if (!newPlaceId) return;
+    const res = await fetch(`/api/places/${newPlaceId}`);
+    const data = await res.json();
+    updateStop(idx, { currentMenu: data.currentMenu ?? null });
+  }
+
+  function setOrderQty(idx: number, itemId: string, value: string) {
+    setStops((prev) =>
+      prev.map((s, i) => {
+        if (i !== idx) return s;
+        const orderQty = { ...s.orderQty, [itemId]: value };
+        const total = computeStopTotal({ ...s, orderQty });
+        return { ...s, orderQty, amount: total > 0 ? String(total) : s.amount };
+      })
+    );
+  }
+
+  function addOrderRow(idx: number) {
+    updateStop(idx, { newOrderRows: [...stops[idx].newOrderRows, { name: "", price: "", qty: "1" }] });
+  }
+  function updateOrderRow(idx: number, rowIdx: number, patch: Partial<OrderRow>) {
+    setStops((prev) =>
+      prev.map((s, i) => {
+        if (i !== idx) return s;
+        const newOrderRows = s.newOrderRows.map((r, ri) => (ri === rowIdx ? { ...r, ...patch } : r));
+        const total = computeStopTotal({ ...s, newOrderRows });
+        return { ...s, newOrderRows, amount: total > 0 ? String(total) : s.amount };
+      })
+    );
+  }
+  function removeOrderRow(idx: number, rowIdx: number) {
+    updateStop(idx, { newOrderRows: stops[idx].newOrderRows.filter((_, ri) => ri !== rowIdx) });
+  }
+
+  async function addPlaceForStop(idx: number) {
+    const name = stops[idx].newPlaceName.trim();
+    if (!name) return;
     const res = await fetch("/api/places", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: newPlaceName }),
+      body: JSON.stringify({ name }),
     });
     const created: Place = await res.json();
     setPlaces((prev) => [...prev, created]);
-    setPlaceId(created.id);
-    setShowNewPlace(false);
-    setNewPlaceName("");
-  }
-
-  async function deleteSelectedPlace() {
-    if (!selectedPlace) return;
-    if (!confirm(`"${selectedPlace.name}"을(를) 삭제할까요? 메뉴 이력도 함께 사라집니다.`)) return;
-    await fetch(`/api/places/${selectedPlace.id}`, { method: "DELETE" });
-    setPlaces((prev) => prev.filter((p) => p.id !== selectedPlace.id));
-    setPlaceId("");
+    updateStop(idx, { showNewPlace: false, newPlaceName: "" });
+    await selectPlaceForStop(idx, created.id);
   }
 
   function addAttendeeFromPick() {
@@ -200,18 +235,25 @@ export default function MeetingForm({
   }
 
   async function handleSubmit() {
-    if (!placeId || attendeeIds.length === 0) {
-      alert("장소와 참석자를 선택해주세요.");
+    if (stops.some((s) => !s.placeId)) {
+      alert("모든 차수에 장소를 선택해주세요.");
+      return;
+    }
+    if (attendeeIds.length === 0) {
+      alert("참석자를 선택해주세요.");
       return;
     }
     setSaving(true);
     const payload = {
       date,
       time,
-      placeId,
       attendeeIds,
-      amount: amount ? Number(amount) : undefined,
-      orderedItems: buildOrderedItems(),
+      stops: stops.map((s) => ({
+        label: s.label,
+        placeId: s.placeId,
+        amount: s.amount ? Number(s.amount) : undefined,
+        orderedItems: buildOrderedItemsForStop(s),
+      })),
       stories: stories
         .filter((s) => s.content.trim())
         .map((s) => ({
@@ -233,6 +275,11 @@ export default function MeetingForm({
   const nameOf = (id: string) => people.find((p) => p.id === id)?.name ?? "";
   const addressOf = (p: Place) => [p.city, p.gu, p.street].filter(Boolean).join(" ");
 
+  const activeStop = stops[activeStopIdx];
+  const activeStopIndexInArray = activeStopIdx;
+  const activePlace = places.find((p) => p.id === activeStop.placeId) ?? null;
+  const activeTotal = computeStopTotal(activeStop);
+
   return (
     <div className="bg-white border border-[#ddd8ca] rounded-2xl p-5 flex flex-col gap-5">
       <div className="grid grid-cols-2 gap-3">
@@ -246,115 +293,175 @@ export default function MeetingForm({
         </div>
       </div>
 
-      {/* 장소 */}
+      {/* 차수 탭 */}
       <div>
-        <label className="text-xs text-[#7a7768] block mb-1">장소</label>
-        <div className="flex gap-2">
-          <select value={placeId} onChange={(e) => setPlaceId(e.target.value)} className="flex-1">
-            <option value="">기존 장소에서 선택...</option>
-            {places.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-          <button type="button" onClick={() => setShowNewPlace((v) => !v)} className="px-3 py-2 border border-[#ddd8ca] bg-white text-sm">
-            + 새 장소
+        <label className="text-xs text-[#7a7768] block mb-1">장소 (같은 모임에서 2차, 3차로 이어질 수 있어요)</label>
+        <div className="flex gap-1 mb-2 flex-wrap">
+          {stops.map((s, idx) => (
+            <button
+              key={s.tempId}
+              type="button"
+              onClick={() => setActiveStopIdx(idx)}
+              className={`px-3 py-1.5 text-sm rounded-t-lg border-b-2 ${
+                idx === activeStopIdx ? "border-[#b4622f] text-[#b4622f] font-medium bg-white" : "border-transparent text-[#7a7768] bg-[#faf8f3]"
+              }`}
+            >
+              {s.label}
+              {places.find((p) => p.id === s.placeId) ? ` · ${places.find((p) => p.id === s.placeId)!.name}` : ""}
+            </button>
+          ))}
+          <button type="button" onClick={addStop} className="px-3 py-1.5 text-sm text-[#7a7768] bg-white border border-dashed border-[#ddd8ca] rounded-lg">
+            + 차수 추가
           </button>
         </div>
 
-        {showNewPlace && (
-          <div className="mt-2 p-3 bg-[#faf8f3] rounded-lg flex flex-col gap-2">
-            <input placeholder="장소 이름" value={newPlaceName} onChange={(e) => setNewPlaceName(e.target.value)} />
-            <p className="text-xs text-[#a09c8c]">
-              주소·전화번호·메뉴는 저장 후{" "}
-              <Link href="/places" className="text-[#b4622f]">
-                장소 관리
-              </Link>
-              에서 채워주세요.
-            </p>
-            <button type="button" onClick={addPlace} className="self-start px-3 py-2 bg-[#2b2a26] text-white text-sm">
-              장소 추가
+        <div className="border border-[#ddd8ca] rounded-lg p-3">
+          <div className="flex items-center gap-2 mb-2">
+            <input
+              value={activeStop.label}
+              onChange={(e) => updateStop(activeStopIndexInArray, { label: e.target.value })}
+              className="text-sm font-medium w-20"
+            />
+            {stops.length > 1 && (
+              <button type="button" onClick={() => removeStop(activeStopIndexInArray)} className="text-xs text-[#a34a3a] bg-transparent p-0 ml-auto">
+                이 차수 삭제
+              </button>
+            )}
+          </div>
+
+          <div className="flex gap-2">
+            <select
+              value={activeStop.placeId}
+              onChange={(e) => selectPlaceForStop(activeStopIndexInArray, e.target.value)}
+              className="flex-1"
+            >
+              <option value="">기존 장소에서 선택...</option>
+              {places.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => updateStop(activeStopIndexInArray, { showNewPlace: !activeStop.showNewPlace })}
+              className="px-3 py-2 border border-[#ddd8ca] bg-white text-sm whitespace-nowrap"
+            >
+              + 새 장소
             </button>
           </div>
-        )}
 
-        {selectedPlace && (
-          <div className="mt-2 p-3 bg-[#faf8f3] rounded-lg text-sm text-[#7a7768]">
-            <div className="flex items-center justify-between mb-2">
-              {addressOf(selectedPlace) ? <div>주소: {addressOf(selectedPlace)}</div> : <div />}
-              <div className="flex gap-2 text-xs">
-                <button type="button" onClick={() => setPlaceId("")} className="text-[#7a7768] bg-transparent p-0">
+          {activeStop.showNewPlace && (
+            <div className="mt-2 p-3 bg-[#faf8f3] rounded-lg flex flex-col gap-2">
+              <input
+                placeholder="장소 이름"
+                value={activeStop.newPlaceName}
+                onChange={(e) => updateStop(activeStopIndexInArray, { newPlaceName: e.target.value })}
+              />
+              <p className="text-xs text-[#a09c8c]">
+                주소·전화번호는 저장 후{" "}
+                <Link href="/places" className="text-[#b4622f]">
+                  장소 관리
+                </Link>
+                에서 채워주세요.
+              </p>
+              <button type="button" onClick={() => addPlaceForStop(activeStopIndexInArray)} className="self-start px-3 py-2 bg-[#2b2a26] text-white text-sm">
+                장소 추가
+              </button>
+            </div>
+          )}
+
+          {activePlace && (
+            <div className="mt-2 p-3 bg-[#faf8f3] rounded-lg text-sm text-[#7a7768]">
+              <div className="flex items-center justify-between mb-2">
+                {addressOf(activePlace) ? <div>주소: {addressOf(activePlace)}</div> : <div />}
+                <button
+                  type="button"
+                  onClick={() => selectPlaceForStop(activeStopIndexInArray, "")}
+                  className="text-xs text-[#7a7768] bg-transparent p-0"
+                >
                   선택 해제
                 </button>
-                <button type="button" onClick={deleteSelectedPlace} className="text-[#a34a3a] bg-transparent p-0">
-                  이 장소 삭제
-                </button>
               </div>
+
+              <p className="text-xs font-medium text-[#2b2a26] mb-1">메뉴 주문 (수량 선택 시 금액 자동 계산)</p>
+              {activeStop.currentMenu && activeStop.currentMenu.items.length > 0 ? (
+                <div className="flex flex-col gap-1 mb-2">
+                  {activeStop.currentMenu.items.map((item) => (
+                    <div key={item.id} className="flex items-center gap-2">
+                      <span className="flex-1 text-xs">
+                        {item.name} {item.price ? `(${item.price.toLocaleString()}원)` : ""}
+                      </span>
+                      <input
+                        type="number"
+                        min={0}
+                        placeholder="0"
+                        value={activeStop.orderQty[item.id] ?? ""}
+                        onChange={(e) => setOrderQty(activeStopIndexInArray, item.id, e.target.value)}
+                        className="w-16 text-xs"
+                      />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs mb-2">등록된 메뉴가 없습니다.</p>
+              )}
+
+              {activeStop.newOrderRows.map((row, ri) => (
+                <div key={ri} className="flex items-center gap-2 mb-1">
+                  <input
+                    placeholder="메뉴명"
+                    value={row.name}
+                    onChange={(e) => updateOrderRow(activeStopIndexInArray, ri, { name: e.target.value })}
+                    className="flex-1 text-xs"
+                  />
+                  <input
+                    type="number"
+                    placeholder="가격"
+                    value={row.price}
+                    onChange={(e) => updateOrderRow(activeStopIndexInArray, ri, { price: e.target.value })}
+                    className="w-20 text-xs"
+                  />
+                  <input
+                    type="number"
+                    min={0}
+                    placeholder="수량"
+                    value={row.qty}
+                    onChange={(e) => updateOrderRow(activeStopIndexInArray, ri, { qty: e.target.value })}
+                    className="w-14 text-xs"
+                  />
+                  <button type="button" onClick={() => removeOrderRow(activeStopIndexInArray, ri)} className="text-xs text-[#a09c8c] bg-transparent p-0">
+                    ×
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => addOrderRow(activeStopIndexInArray)}
+                className="text-xs px-2 py-1 border border-dashed border-[#ddd8ca] bg-white mb-2"
+              >
+                + 메뉴에 없는 항목 추가
+              </button>
+
+              {activeTotal > 0 && <p className="text-xs text-[#b4622f]">주문 합계: {activeTotal.toLocaleString()}원 (아래 금액에 자동 반영됨)</p>}
+
+              <Link href={`/places/${activePlace.id}`} className="text-xs text-[#b4622f] block mt-2">
+                장소 상세/메뉴 갱신
+              </Link>
             </div>
+          )}
 
-            <p className="text-xs font-medium text-[#2b2a26] mb-1">메뉴 주문 (수량 선택 시 금액 자동 계산)</p>
-            {currentMenu && currentMenu.items.length > 0 ? (
-              <div className="flex flex-col gap-1 mb-2">
-                {currentMenu.items.map((item) => (
-                  <div key={item.id} className="flex items-center gap-2">
-                    <span className="flex-1 text-xs">
-                      {item.name} {item.price ? `(${item.price.toLocaleString()}원)` : ""}
-                    </span>
-                    <input
-                      type="number"
-                      min={0}
-                      placeholder="0"
-                      value={orderQty[item.id] ?? ""}
-                      onChange={(e) => setOrderQty((prev) => ({ ...prev, [item.id]: e.target.value }))}
-                      className="w-16 text-xs"
-                    />
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-xs mb-2">등록된 메뉴가 없습니다.</p>
-            )}
-
-            {newOrderRows.map((row, idx) => (
-              <div key={idx} className="flex items-center gap-2 mb-1">
-                <input
-                  placeholder="메뉴명"
-                  value={row.name}
-                  onChange={(e) => updateNewOrderRow(idx, { name: e.target.value })}
-                  className="flex-1 text-xs"
-                />
-                <input
-                  type="number"
-                  placeholder="가격"
-                  value={row.price}
-                  onChange={(e) => updateNewOrderRow(idx, { price: e.target.value })}
-                  className="w-20 text-xs"
-                />
-                <input
-                  type="number"
-                  min={0}
-                  placeholder="수량"
-                  value={row.qty}
-                  onChange={(e) => updateNewOrderRow(idx, { qty: e.target.value })}
-                  className="w-14 text-xs"
-                />
-                <button type="button" onClick={() => removeNewOrderRow(idx)} className="text-xs text-[#a09c8c] bg-transparent p-0">
-                  ×
-                </button>
-              </div>
-            ))}
-            <button type="button" onClick={addNewOrderRow} className="text-xs px-2 py-1 border border-dashed border-[#ddd8ca] bg-white mb-2">
-              + 메뉴에 없는 항목 추가
-            </button>
-
-            {orderTotal > 0 && <p className="text-xs text-[#b4622f]">주문 합계: {orderTotal.toLocaleString()}원 (아래 금액에 자동 반영됨)</p>}
-
-            <Link href={`/places/${selectedPlace.id}`} className="text-xs text-[#b4622f] block mt-2">
-              장소 상세/메뉴 갱신
-            </Link>
+          <div className="mt-3">
+            <label className="text-xs text-[#7a7768] block mb-1">{activeStop.label} 금액 (메뉴 선택 시 자동 계산, 직접 수정도 가능)</label>
+            <input
+              type="number"
+              placeholder="120000"
+              value={activeStop.amount}
+              onChange={(e) => updateStop(activeStopIndexInArray, { amount: e.target.value })}
+              className="w-full"
+            />
           </div>
-        )}
+        </div>
       </div>
 
       {/* 참석자 */}
@@ -458,10 +565,11 @@ export default function MeetingForm({
         </div>
       )}
 
-      <div>
-        <label className="text-xs text-[#7a7768] block mb-1">금액 (메뉴 선택 시 자동 계산, 직접 수정도 가능)</label>
-        <input type="number" placeholder="120000" value={amount} onChange={(e) => setAmount(e.target.value)} className="w-full" />
-      </div>
+      {stops.length > 1 && (
+        <p className="text-sm text-[#7a7768]">
+          전체 합계: {stops.reduce((sum, s) => sum + (Number(s.amount) || 0), 0).toLocaleString()}원 ({stops.map((s) => s.label).join(" → ")})
+        </p>
+      )}
 
       <button
         type="button"

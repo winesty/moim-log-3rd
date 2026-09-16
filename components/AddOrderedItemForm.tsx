@@ -4,7 +4,15 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { MenuSnapshot } from "@/lib/types";
 
-export default function AddOrderedItemForm({ meetingId, currentMenu }: { meetingId: string; currentMenu: MenuSnapshot | null }) {
+export default function AddOrderedItemForm({
+  meetingId,
+  stopId,
+  currentMenu,
+}: {
+  meetingId: string;
+  stopId: string;
+  currentMenu: MenuSnapshot | null;
+}) {
   const router = useRouter();
   const [qty, setQty] = useState<Record<string, string>>({});
   const [customRows, setCustomRows] = useState<{ name: string; price: string; qty: string }[]>([]);
@@ -37,7 +45,7 @@ export default function AddOrderedItemForm({ meetingId, currentMenu }: { meeting
     await fetch(`/api/meetings/${meetingId}`, {
       method: "PUT",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ newOrderedItems: items }),
+      body: JSON.stringify({ stopId, newOrderedItems: items }),
     });
     setSaving(false);
     setQty({});
@@ -46,7 +54,7 @@ export default function AddOrderedItemForm({ meetingId, currentMenu }: { meeting
   }
 
   return (
-    <div className="border border-[#ddd8ca] rounded-lg p-3 bg-[#faf8f3] mt-4">
+    <div className="border border-[#ddd8ca] rounded-lg p-3 bg-[#faf8f3] mt-2">
       <p className="text-sm font-medium mb-1">메뉴 추가</p>
       <p className="text-xs text-[#a09c8c] mb-2">여기서 추가하면 장소의 메뉴에도 이번 모임 일자로 함께 반영돼요.</p>
 
