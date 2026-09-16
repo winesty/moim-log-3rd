@@ -24,20 +24,23 @@ export default async function HomePage() {
       )}
 
       <ul className="flex flex-col gap-3">
-        {recent.map((m) => (
-          <li key={m.id}>
-            <Link href={`/meeting/${m.id}`} className="block border border-[#ddd8ca] rounded-xl p-4 bg-white no-underline text-[#2b2a26]">
-              <div className="flex justify-between items-baseline mb-1">
-                <span className="font-medium">
-                  {m.date} {m.time}
-                </span>
-                {m.amount != null && <span className="text-sm text-[#7a7768]">{m.amount.toLocaleString()}원</span>}
-              </div>
-              <p className="text-sm text-[#7a7768] mb-1">{m.place?.name}</p>
-              <p className="text-sm text-[#7a7768]">{m.attendees.map((a) => a.name).join(", ")}</p>
-            </Link>
-          </li>
-        ))}
+        {recent.map((m) => {
+          const totalAmount = m.stops.reduce((sum, s) => sum + (s.amount ?? 0), 0);
+          return (
+            <li key={m.id}>
+              <Link href={`/meeting/${m.id}`} className="block border border-[#ddd8ca] rounded-xl p-4 bg-white no-underline text-[#2b2a26]">
+                <div className="flex justify-between items-baseline mb-1">
+                  <span className="font-medium">
+                    {m.date} {m.time}
+                  </span>
+                  {totalAmount > 0 && <span className="text-sm text-[#7a7768]">{totalAmount.toLocaleString()}원</span>}
+                </div>
+                <p className="text-sm text-[#7a7768] mb-1">{m.stops.map((s) => s.place?.name ?? "장소 미상").join(" → ")}</p>
+                <p className="text-sm text-[#7a7768]">{m.attendees.map((a) => a.name).join(", ")}</p>
+              </Link>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );

@@ -43,7 +43,7 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
         <div className="flex flex-col gap-2">
           {meetings.map((m) => (
             <Link key={m.id} href={`/meeting/${m.id}`} className="block bg-[#faf8f3] rounded-lg p-2 text-sm no-underline text-[#2b2a26]">
-              {m.date} · {m.place?.name}
+              {m.date} · {m.stops.map((s) => s.place?.name ?? "장소 미상").join(" → ")}
             </Link>
           ))}
         </div>
