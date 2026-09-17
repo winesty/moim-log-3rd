@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Person, Place, StoryCategory, MenuSnapshot, formatMeetingDuration } from "@/lib/types";
+import { Person, Place, StoryCategory, MenuSnapshot, Group, formatMeetingDuration, derivePresentGroups } from "@/lib/types";
 import { findPlacesByName, sortPlacesByName } from "@/lib/storage/searchHelper";
 
 type StoryDraft = { tempId: string; personId: string; content: string };
@@ -71,16 +71,19 @@ export default function MeetingForm({
   initialPeople,
   initialPlaces,
   initialCategories,
+  initialGroups,
 }: {
   initialPeople: Person[];
   initialPlaces: Place[];
   initialCategories: StoryCategory[];
+  initialGroups: Group[];
 }) {
   const router = useRouter();
 
   const [people, setPeople] = useState(initialPeople);
   const [places, setPlaces] = useState(initialPlaces);
   const [categories, setCategories] = useState(initialCategories);
+  const [groups] = useState(initialGroups);
 
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [time, setTime] = useState("19:00");
@@ -184,9 +187,16 @@ export default function MeetingForm({
   }
 
   function addAttendeeFromPick() {
-    if (!attendeePick || attendeeIds.includes(attendeePick)) return;
-    setAttendeeIds((prev) => [...prev, attendeePick]);
-    setStories((prev) => [...prev, { tempId: crypto.randomUUID(), personId: attendeePick, content: "" }]);
+    if (!attendeePick) return;
+    const [kind, id] = attendeePick.split(":");
+    const idsToAdd: string[] = kind === "group" ? groups.find((g) => g.id === id)?.memberIds ?? [] : [id];
+    const newIds = idsToAdd.filter((pid) => !attendeeIds.includes(pid));
+    if (newIds.length === 0) {
+      setAttendeePick("");
+      return;
+    }
+    setAttendeeIds((prev) => [...prev, ...newIds]);
+    setStories((prev) => [...prev, ...newIds.map((pid) => ({ tempId: crypto.randomUUID(), personId: pid, content: "" }))]);
     setAttendeePick("");
   }
 
@@ -215,6 +225,11 @@ export default function MeetingForm({
   function removeAttendee(id: string) {
     setAttendeeIds((prev) => prev.filter((x) => x !== id));
     setStories((prev) => prev.filter((s) => s.personId !== id));
+  }
+
+  function removeGroup(group: Group) {
+    setAttendeeIds((prev) => prev.filter((x) => !group.memberIds.includes(x)));
+    setStories((prev) => prev.filter((s) => !group.memberIds.includes(s.personId)));
   }
 
   function addStoryBlock() {
@@ -295,6 +310,11 @@ export default function MeetingForm({
 
   const nameOf = (id: string) => people.find((p) => p.id === id)?.name ?? "";
   const addressOf = (p: Place) => [p.city, p.gu, p.street].filter(Boolean).join(" ");
+  const presentGroups = derivePresentGroups(attendeeIds, groups);
+  const coveredByGroup = new Set(presentGroups.flatMap((g) => g.memberIds));
+  const soloAttendeeIds = attendeeIds.filter((id) => !coveredByGroup.has(id));
+  const sortedGroups = groups.slice().sort((a, b) => a.name.localeCompare(b.name, "ko"));
+  const sortedPeople = people.slice().sort((a, b) => a.name.localeCompare(b.name, "ko"));
 
   const activeStop = stops[activeStopIdx];
   const activeStopIndexInArray = activeStopIdx;
@@ -528,7 +548,15 @@ export default function MeetingForm({
       <div>
         <label className="text-xs text-[#7a7768] block mb-1">참석자</label>
         <div className="flex flex-wrap gap-2 mb-2">
-          {attendeeIds.map((id) => (
+          {presentGroups.map((g) => (
+            <span key={g.id} className="flex items-center gap-1 bg-[#e4dcc9] text-[#5c5330] text-xs px-3 py-1 rounded-full">
+              {g.name} 그룹
+              <button type="button" onClick={() => removeGroup(g)} aria-label={`${g.name} 그룹 제거`} className="text-[#5c5330]">
+                ×
+              </button>
+            </span>
+          ))}
+          {soloAttendeeIds.map((id) => (
             <span key={id} className="flex items-center gap-1 bg-[#f1e9e0] text-[#8a4a26] text-xs px-3 py-1 rounded-full">
               {nameOf(id)}
               <button type="button" onClick={() => removeAttendee(id)} aria-label={`${nameOf(id)} 제거`} className="text-[#8a4a26]">
@@ -539,14 +567,25 @@ export default function MeetingForm({
         </div>
         <div className="flex gap-2">
           <select value={attendeePick} onChange={(e) => setAttendeePick(e.target.value)} className="flex-1">
-            <option value="">기존 참석자에서 선택...</option>
-            {people
-              .filter((p) => !attendeeIds.includes(p.id))
-              .map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
+            <option value="">그룹 또는 참석자 선택...</option>
+            {groups.length > 0 && (
+              <optgroup label="그룹 (전원 추가)">
+                {sortedGroups.map((g) => (
+                  <option key={g.id} value={`group:${g.id}`}>
+                    {g.name} ({g.memberIds.length}명)
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            <optgroup label="참석자">
+              {sortedPeople
+                .filter((p) => !attendeeIds.includes(p.id))
+                .map((p) => (
+                  <option key={p.id} value={`person:${p.id}`}>
+                    {p.name}
+                  </option>
+                ))}
+            </optgroup>
           </select>
           <button type="button" onClick={addAttendeeFromPick} className="px-3 py-2 border border-[#ddd8ca] bg-white text-sm">
             추가
