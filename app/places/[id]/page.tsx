@@ -75,7 +75,7 @@ export default async function PlaceDetailPage({ params }: { params: { id: string
               href={`/meeting/${m.id}`}
               className="block bg-[#faf8f3] rounded-lg p-2 text-sm no-underline text-[#2b2a26]"
             >
-              {m.date} · {m.attendees.map((a) => a.name).join(", ")}
+              {m.date} · {[...m.presentGroups.map((g) => `${g.name} 그룹`), ...m.soloAttendees.map((a) => a.name)].join(", ")}
             </Link>
           ))}
         </div>

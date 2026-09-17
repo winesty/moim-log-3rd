@@ -6,7 +6,7 @@ import AddStopForm from "@/components/AddStopForm";
 import DeleteStopButton from "@/components/DeleteStopButton";
 import DeleteMeetingButton from "@/components/DeleteMeetingButton";
 import { latestMenuSnapshot } from "@/lib/storage/searchHelper";
-import { formatMeetingDuration } from "@/lib/types";
+import { formatMeetingDuration, derivePresentGroups } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -15,12 +15,16 @@ export default async function MeetingDetailPage({ params }: { params: { id: stri
   const meeting = await storage.getMeeting(params.id);
   if (!meeting) notFound();
 
-  const [people, categories, places] = await Promise.all([
+  const [people, categories, places, groups] = await Promise.all([
     storage.listPeople(),
     storage.listCategories(),
     storage.listPlaces(),
+    storage.listGroups(),
   ]);
   const attendees = people.filter((p) => meeting.attendeeIds.includes(p.id));
+  const presentGroups = derivePresentGroups(meeting.attendeeIds, groups);
+  const coveredIds = new Set(presentGroups.flatMap((g) => g.memberIds));
+  const soloAttendees = attendees.filter((a) => !coveredIds.has(a.id));
   const placesById = new Map(places.map((p) => [p.id, p]));
 
   const stopsWithMenu = await Promise.all(
@@ -40,7 +44,9 @@ export default async function MeetingDetailPage({ params }: { params: { id: stri
         </h1>
         <DeleteMeetingButton meetingId={meeting.id} />
       </div>
-      <p className="text-sm text-[#7a7768] mb-1">{attendees.map((a) => a.name).join(", ")}</p>
+      <p className="text-sm text-[#7a7768] mb-1">
+        {[...presentGroups.map((g) => `${g.name} 그룹`), ...soloAttendees.map((a) => a.name)].join(", ")}
+      </p>
       {formatMeetingDuration(meeting) && <p className="text-sm text-[#a09c8c] mb-1">기간: {formatMeetingDuration(meeting)}</p>}
       {totalAmount > 0 && <p className="text-sm text-[#a09c8c] mb-4">전체 금액: {totalAmount.toLocaleString()}원</p>}
 

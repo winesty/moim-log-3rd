@@ -67,7 +67,12 @@ export default function SearchPage() {
               </div>
 
               <p className="text-sm text-[#7a7768] mb-2">
-                {m.attendees.map((a, i) => (
+                {m.presentGroups.map((g) => (
+                  <span key={g.id} className="bg-[#f1e9e0] text-[#8a4a26] text-xs px-2 py-0.5 rounded-full mr-1">
+                    {g.name} 그룹
+                  </span>
+                ))}
+                {m.soloAttendees.map((a, i) => (
                   <span key={a.id}>
                     {i > 0 && ", "}
                     <Link href={`/people/${a.id}`} className="text-[#b4622f]">

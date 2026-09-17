@@ -36,7 +36,9 @@ export default async function HomePage() {
                   {totalAmount > 0 && <span className="text-sm text-[#7a7768]">{totalAmount.toLocaleString()}원</span>}
                 </div>
                 <p className="text-sm text-[#7a7768] mb-1">{m.stops.map((s) => s.place?.name ?? "장소 미상").join(" → ")}</p>
-                <p className="text-sm text-[#7a7768]">{m.attendees.map((a) => a.name).join(", ")}</p>
+                <p className="text-sm text-[#7a7768]">
+                  {[...m.presentGroups.map((g) => `${g.name} 그룹`), ...m.soloAttendees.map((a) => a.name)].join(", ")}
+                </p>
               </Link>
             </li>
           );
