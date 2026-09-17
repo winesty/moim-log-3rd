@@ -3,9 +3,11 @@ import {
   Person,
   Place,
   MenuSnapshot,
+  Group,
   SearchQuery,
   MeetingSearchResult,
   PlaceSearchQuery,
+  derivePresentGroups,
 } from "@/lib/types";
 
 /** 장소별 메뉴 스냅샷 중 effectiveDate가 가장 최신인 것을 반환 */
@@ -31,6 +33,7 @@ export function searchMeetingsInMemory(
   people: Person[],
   places: Place[],
   menuSnapshots: MenuSnapshot[],
+  groups: Group[],
   query: SearchQuery
 ): MeetingSearchResult[] {
   const peopleById = new Map(people.map((p) => [p.id, p]));
@@ -74,11 +77,18 @@ export function searchMeetingsInMemory(
   });
 
   return matches
-    .map((m) => ({
-      ...m,
-      stops: m.stops.map((s) => ({ ...s, place: placesById.get(s.placeId) ?? null })),
-      attendees: m.attendeeIds.map((id) => peopleById.get(id)).filter(Boolean) as Person[],
-    }))
+    .map((m) => {
+      const attendees = m.attendeeIds.map((id) => peopleById.get(id)).filter(Boolean) as Person[];
+      const presentGroups = derivePresentGroups(m.attendeeIds, groups);
+      const coveredIds = new Set(presentGroups.flatMap((g) => g.memberIds));
+      return {
+        ...m,
+        stops: m.stops.map((s) => ({ ...s, place: placesById.get(s.placeId) ?? null })),
+        attendees,
+        presentGroups,
+        soloAttendees: attendees.filter((a) => !coveredIds.has(a.id)),
+      };
+    })
     .sort((a, b) => (a.date < b.date ? 1 : -1));
 }
 

@@ -221,12 +221,13 @@ export abstract class JsonBackedProvider implements StorageProvider {
 
   // --- 검색 ---
   async search(query: SearchQuery): Promise<MeetingSearchResult[]> {
-    const [meetings, people, places, menus] = await Promise.all([
+    const [meetings, people, places, menus, groups] = await Promise.all([
       this.listMeetings(),
       this.listPeople(),
       this.listPlaces(),
       this.listMenuSnapshotsAll(),
+      this.listGroups(),
     ]);
-    return searchMeetingsInMemory(meetings, people, places, menus, query);
+    return searchMeetingsInMemory(meetings, people, places, menus, groups, query);
   }
 }

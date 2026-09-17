@@ -113,6 +113,8 @@ export interface StopWithPlace extends Stop {
 export interface MeetingSearchResult extends Omit<Meeting, "stops"> {
   stops: StopWithPlace[];
   attendees: Person[];
+  presentGroups: Group[]; // 참석자 전원이 포함된 그룹들 (표시용, 자동 판별)
+  soloAttendees: Person[]; // 위 그룹들에 속하지 않은 개별 참석자
 }
 
 /**
@@ -124,6 +126,16 @@ export interface Group {
   memberIds: ID[];
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * 참석자 목록에 어떤 그룹의 멤버 전원이 포함되어 있으면, 그 모임에
+ * "그 그룹이 참석했다"고 자동으로 판단한다. 별도로 그룹 소속을
+ * 기록/관리할 필요 없이 참석자 구성만으로 계산된다.
+ */
+export function derivePresentGroups(attendeeIds: ID[], groups: Group[]): Group[] {
+  const attendeeSet = new Set(attendeeIds);
+  return groups.filter((g) => g.memberIds.length > 0 && g.memberIds.every((id) => attendeeSet.has(id)));
 }
 
 export type SearchQuery = {
