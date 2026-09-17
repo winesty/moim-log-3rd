@@ -547,23 +547,39 @@ export default function MeetingForm({
       {/* 참석자 */}
       <div>
         <label className="text-xs text-[#7a7768] block mb-1">참석자</label>
-        <div className="flex flex-wrap gap-2 mb-2">
+        <div className="flex flex-col gap-2 mb-2">
           {presentGroups.map((g) => (
-            <span key={g.id} className="flex items-center gap-1 bg-[#e4dcc9] text-[#5c5330] text-xs px-3 py-1 rounded-full">
-              {g.name} 그룹
-              <button type="button" onClick={() => removeGroup(g)} aria-label={`${g.name} 그룹 제거`} className="text-[#5c5330]">
-                ×
+            <div key={g.id} className="flex flex-wrap items-center gap-1 bg-[#e4dcc9] rounded-lg px-2 py-1.5">
+              <span className="text-xs font-medium text-[#5c5330] mr-1">{g.name} 그룹</span>
+              {g.memberIds.map((id) => (
+                <span key={id} className="flex items-center gap-1 bg-white text-[#5c5330] text-[11px] px-2 py-0.5 rounded-full">
+                  {nameOf(id)}
+                  <button type="button" onClick={() => removeAttendee(id)} aria-label={`${nameOf(id)} 개별 제거`} className="text-[#5c5330]">
+                    ×
+                  </button>
+                </span>
+              ))}
+              <button
+                type="button"
+                onClick={() => removeGroup(g)}
+                className="text-[11px] text-[#5c5330] underline bg-transparent p-0 ml-1"
+              >
+                그룹 전체 빼기
               </button>
-            </span>
+            </div>
           ))}
-          {soloAttendeeIds.map((id) => (
-            <span key={id} className="flex items-center gap-1 bg-[#f1e9e0] text-[#8a4a26] text-xs px-3 py-1 rounded-full">
-              {nameOf(id)}
-              <button type="button" onClick={() => removeAttendee(id)} aria-label={`${nameOf(id)} 제거`} className="text-[#8a4a26]">
-                ×
-              </button>
-            </span>
-          ))}
+          {soloAttendeeIds.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {soloAttendeeIds.map((id) => (
+                <span key={id} className="flex items-center gap-1 bg-[#f1e9e0] text-[#8a4a26] text-xs px-3 py-1 rounded-full">
+                  {nameOf(id)}
+                  <button type="button" onClick={() => removeAttendee(id)} aria-label={`${nameOf(id)} 제거`} className="text-[#8a4a26]">
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
         </div>
         <div className="flex gap-2">
           <select value={attendeePick} onChange={(e) => setAttendeePick(e.target.value)} className="flex-1">
