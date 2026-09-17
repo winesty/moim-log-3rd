@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Place } from "@/lib/types";
+import { sortPlacesByName } from "@/lib/storage/searchHelper";
 
 export default function AddStopForm({ meetingId, places, nextLabel }: { meetingId: string; places: Place[]; nextLabel: string }) {
   const router = useRouter();
@@ -45,7 +46,7 @@ export default function AddStopForm({ meetingId, places, nextLabel }: { meetingI
         <input value={label} onChange={(e) => setLabel(e.target.value)} className="w-20 text-sm" />
         <select value={placeId} onChange={(e) => setPlaceId(e.target.value)} className="flex-1">
           <option value="">장소 선택...</option>
-          {places.map((p) => (
+          {sortPlacesByName(places).map((p) => (
             <option key={p.id} value={p.id}>
               {p.name}
             </option>

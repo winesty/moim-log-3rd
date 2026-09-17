@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Place } from "@/lib/types";
+import { findPlacesByName } from "@/lib/storage/searchHelper";
 
 declare global {
   interface Window {
@@ -21,9 +23,17 @@ export default function PlaceForm() {
   const [zonecode, setZonecode] = useState("");
   const [tel, setTel] = useState("");
   const [category, setCategory] = useState("");
+  const [existingPlaces, setExistingPlaces] = useState<Place[]>([]);
 
   const [menuRows, setMenuRows] = useState<MenuRow[]>([{ name: "", price: "" }]);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/places")
+      .then((res) => res.json())
+      .then(setExistingPlaces)
+      .catch(() => {});
+  }, []);
 
   function openAddressSearch() {
     if (!window.daum?.Postcode) {
@@ -53,6 +63,20 @@ export default function PlaceForm() {
       alert("장소명을 입력해주세요.");
       return;
     }
+
+    const duplicates = findPlacesByName(existingPlaces, name);
+    if (duplicates.length > 0) {
+      const target = duplicates[0];
+      const addressHint = [target.city, target.gu, target.street].filter(Boolean).join(" ") || "주소 미등록";
+      const goToExisting = confirm(
+        `"${name}" 이름의 장소가 이미 있어요 (${addressHint}).\n\n확인 → 기존 장소로 이동할게요\n취소 → 그래도 새 장소로 등록할게요`
+      );
+      if (goToExisting) {
+        router.push(`/places/${target.id}`);
+        return;
+      }
+    }
+
     setSaving(true);
     const placeRes = await fetch("/api/places", {
       method: "POST",

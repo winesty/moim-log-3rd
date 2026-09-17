@@ -3,7 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Person, Place, StoryCategory, MenuSnapshot } from "@/lib/types";
+import { Person, Place, StoryCategory, MenuSnapshot, formatMeetingDuration } from "@/lib/types";
+import { findPlacesByName, sortPlacesByName } from "@/lib/storage/searchHelper";
 
 type StoryDraft = { tempId: string; personId: string; content: string };
 type OrderRow = { name: string; price: string; qty: string };
@@ -83,6 +84,9 @@ export default function MeetingForm({
 
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [time, setTime] = useState("19:00");
+  const [showDuration, setShowDuration] = useState(false);
+  const [endDate, setEndDate] = useState("");
+  const [endTime, setEndTime] = useState("");
 
   const [stops, setStops] = useState<StopDraft[]>([makeStopDraft("1차")]);
   const [activeStopIdx, setActiveStopIdx] = useState(0);
@@ -153,6 +157,21 @@ export default function MeetingForm({
   async function addPlaceForStop(idx: number) {
     const name = stops[idx].newPlaceName.trim();
     if (!name) return;
+
+    const duplicates = findPlacesByName(places, name);
+    if (duplicates.length > 0) {
+      const target = duplicates[0];
+      const addressHint = [target.city, target.gu, target.street].filter(Boolean).join(" ") || "주소 미등록";
+      const useExisting = confirm(
+        `"${name}" 이름의 장소가 이미 있어요 (${addressHint}).\n\n확인 → 기존 장소를 사용할게요\n취소 → 그래도 새 장소로 등록할게요`
+      );
+      if (useExisting) {
+        updateStop(idx, { showNewPlace: false, newPlaceName: "" });
+        await selectPlaceForStop(idx, target.id);
+        return;
+      }
+    }
+
     const res = await fetch("/api/places", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -247,6 +266,8 @@ export default function MeetingForm({
     const payload = {
       date,
       time,
+      endDate: endDate || undefined,
+      endTime: endTime || undefined,
       attendeeIds,
       stops: stops.map((s) => ({
         label: s.label,
@@ -293,6 +314,45 @@ export default function MeetingForm({
         </div>
       </div>
 
+      <div>
+        {!showDuration ? (
+          <button type="button" onClick={() => setShowDuration(true)} className="text-xs text-[#b4622f] bg-transparent p-0">
+            + 기간(몇 시간 / 몇 박) 추가
+          </button>
+        ) : (
+          <div className="border border-[#ddd8ca] rounded-lg p-3">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs text-[#7a7768]">종료 일시 (몇 시간짜리 모임인지, 며칠 여행인지 자동 계산돼요)</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDuration(false);
+                  setEndDate("");
+                  setEndTime("");
+                }}
+                className="text-xs text-[#a09c8c] bg-transparent p-0"
+              >
+                지우기
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-[#7a7768] block mb-1">종료 일자</label>
+                <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full" />
+              </div>
+              <div>
+                <label className="text-xs text-[#7a7768] block mb-1">종료 시간 (선택)</label>
+                <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="w-full" />
+              </div>
+            </div>
+            {(() => {
+              const duration = formatMeetingDuration({ date, time, endDate, endTime });
+              return duration ? <p className="text-xs text-[#b4622f] mt-2">기간: {duration}</p> : null;
+            })()}
+          </div>
+        )}
+      </div>
+
       {/* 차수 탭 */}
       <div>
         <label className="text-xs text-[#7a7768] block mb-1">장소 (같은 모임에서 2차, 3차로 이어질 수 있어요)</label>
@@ -336,7 +396,7 @@ export default function MeetingForm({
               className="flex-1"
             >
               <option value="">기존 장소에서 선택...</option>
-              {places.map((p) => (
+              {sortPlacesByName(places).map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
                 </option>
