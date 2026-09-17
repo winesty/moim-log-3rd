@@ -82,15 +82,27 @@ export function searchMeetingsInMemory(
     .sort((a, b) => (a.date < b.date ? 1 : -1));
 }
 
+/** 이름이 같은(공백/대소문자 무시) 기존 장소들을 찾는다 - 빠른 추가 시 중복 확인용 */
+export function findPlacesByName(places: Place[], name: string): Place[] {
+  const norm = name.trim().toLowerCase();
+  if (!norm) return [];
+  return places.filter((p) => p.name.trim().toLowerCase() === norm);
+}
+
+/** 이름 기준 가나다/ABC 순 정렬 */
+export function sortPlacesByName(places: Place[]): Place[] {
+  return places.slice().sort((a, b) => a.name.localeCompare(b.name, "ko"));
+}
+
 export function searchPlacesInMemory(
   places: Place[],
   menuSnapshots: MenuSnapshot[],
   query: PlaceSearchQuery
 ): Place[] {
   const q = query.q?.trim().toLowerCase();
-  if (!q) return places.slice().sort((a, b) => (a.name > b.name ? 1 : -1));
+  if (!q) return sortPlacesByName(places);
 
-  return places.filter((p) => {
+  const matched = places.filter((p) => {
     const menu = latestMenuSnapshot(menuSnapshots, p.id);
     const haystack = [p.name, p.city, p.gu, p.street, p.category, ...(menu?.items.map((i) => i.name) ?? [])]
       .filter(Boolean)
@@ -98,4 +110,5 @@ export function searchPlacesInMemory(
       .toLowerCase();
     return haystack.includes(q);
   });
+  return sortPlacesByName(matched);
 }

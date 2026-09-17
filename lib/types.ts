@@ -97,6 +97,8 @@ export interface Meeting {
   id: ID;
   date: string;
   time?: string;
+  endDate?: string; // 여러 날에 걸친 모임(1박2일 등)일 때 종료 일자
+  endTime?: string; // 당일 모임이 몇 시간짜리인지 계산할 때 쓰는 종료 시간
   attendeeIds: ID[];
   stops: Stop[]; // 최소 1개
   stories: StoryEntry[];
@@ -113,6 +115,17 @@ export interface MeetingSearchResult extends Omit<Meeting, "stops"> {
   attendees: Person[];
 }
 
+/**
+ * 사람들을 묶는 그룹. 한 사람이 여러 그룹에 속할 수 있다.
+ */
+export interface Group {
+  id: ID;
+  name: string;
+  memberIds: ID[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type SearchQuery = {
   q?: string;
   personId?: ID;
@@ -125,3 +138,26 @@ export type SearchQuery = {
 export type PlaceSearchQuery = {
   q?: string; // 장소명, 지역, 메뉴 통합 검색
 };
+
+/** 시작/종료 일시로 모임 기간을 "3시간" 또는 "1박 2일" 형태로 계산 */
+export function formatMeetingDuration(m: Pick<Meeting, "date" | "time" | "endDate" | "endTime">): string | null {
+  if (!m.endDate && !m.endTime) return null;
+  const endDate = m.endDate || m.date;
+  const startDateTime = new Date(`${m.date}T${m.time || "00:00"}`);
+  const endDateTime = new Date(`${endDate}T${m.endTime || m.time || "00:00"}`);
+  const diffMs = endDateTime.getTime() - startDateTime.getTime();
+  if (isNaN(diffMs) || diffMs < 0) return null;
+
+  const nights = Math.round(
+    (new Date(`${endDate}T00:00:00`).getTime() - new Date(`${m.date}T00:00:00`).getTime()) / (1000 * 60 * 60 * 24)
+  );
+  if (nights > 0) return `${nights}박 ${nights + 1}일`;
+
+  const totalMinutes = Math.round(diffMs / 60000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours === 0 && minutes === 0) return null;
+  if (minutes === 0) return `${hours}시간`;
+  if (hours === 0) return `${minutes}분`;
+  return `${hours}시간 ${minutes}분`;
+}

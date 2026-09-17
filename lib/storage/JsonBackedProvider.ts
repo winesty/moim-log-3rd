@@ -5,6 +5,7 @@ import {
   Place,
   MenuSnapshot,
   StoryCategory,
+  Group,
   SearchQuery,
   MeetingSearchResult,
   PlaceSearchQuery,
@@ -17,6 +18,7 @@ const FILES = {
   menuSnapshots: "menu-snapshots.json",
   categories: "categories.json",
   meetings: "meetings.json",
+  groups: "groups.json",
 } as const;
 
 export const DEFAULT_CATEGORIES: Omit<StoryCategory, "id" | "createdAt">[] = [
@@ -162,6 +164,30 @@ export abstract class JsonBackedProvider implements StorageProvider {
     await this.writeFile(
       FILES.categories,
       all.filter((c) => c.id !== id)
+    );
+  }
+
+  // --- Group ---
+  listGroups() {
+    return this.readFile<Group>(FILES.groups);
+  }
+  async getGroup(id: string) {
+    const all = await this.listGroups();
+    return all.find((g) => g.id === id) ?? null;
+  }
+  async upsertGroup(group: Group) {
+    const all = await this.listGroups();
+    const idx = all.findIndex((g) => g.id === group.id);
+    if (idx >= 0) all[idx] = group;
+    else all.push(group);
+    await this.writeFile(FILES.groups, all);
+    return group;
+  }
+  async deleteGroup(id: string) {
+    const all = await this.listGroups();
+    await this.writeFile(
+      FILES.groups,
+      all.filter((g) => g.id !== id)
     );
   }
 

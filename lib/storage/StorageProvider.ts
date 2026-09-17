@@ -4,6 +4,7 @@ import {
   Place,
   MenuSnapshot,
   StoryCategory,
+  Group,
   SearchQuery,
   MeetingSearchResult,
   PlaceSearchQuery,
@@ -37,6 +38,12 @@ export interface StorageProvider {
   listCategories(): Promise<StoryCategory[]>;
   upsertCategory(category: StoryCategory): Promise<StoryCategory>;
   deleteCategory(id: string): Promise<void>;
+
+  // --- Group (사람 묶음, 한 사람이 여러 그룹에 속할 수 있음) ---
+  listGroups(): Promise<Group[]>;
+  getGroup(id: string): Promise<Group | null>;
+  upsertGroup(group: Group): Promise<Group>;
+  deleteGroup(id: string): Promise<void>;
 
   // --- Meeting ---
   listMeetings(): Promise<Meeting[]>;
