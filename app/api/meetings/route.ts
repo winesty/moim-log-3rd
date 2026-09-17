@@ -40,6 +40,8 @@ export async function POST(req: NextRequest) {
     id: nanoid(),
     date: body.date,
     time: body.time,
+    endDate: body.endDate || undefined,
+    endTime: body.endTime || undefined,
     attendeeIds: body.attendeeIds ?? [],
     stops,
     stories: (body.stories ?? []).map((s: any) => ({

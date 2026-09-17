@@ -3,10 +3,14 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Person } from "@/lib/types";
+import GroupsPanel from "@/components/GroupsPanel";
+
+type PersonWithStats = Person & { lastMeetingDate: string | null; daysSinceLastMeeting: number | null };
 
 export default function PeoplePage() {
+  const [tab, setTab] = useState<"people" | "groups">("people");
   const [q, setQ] = useState("");
-  const [people, setPeople] = useState<Person[]>([]);
+  const [people, setPeople] = useState<PersonWithStats[]>([]);
   const [loading, setLoading] = useState(true);
 
   async function load(query?: string) {
@@ -22,33 +26,69 @@ export default function PeoplePage() {
 
   return (
     <div>
-      <h1 className="text-xl font-medium mb-4">사람</h1>
-
-      <div className="flex gap-2 mb-4">
-        <input
-          placeholder="이름으로 검색"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && load(q)}
-          className="flex-1"
-        />
-        <button type="button" onClick={() => load(q)} className="px-4 py-2 bg-[#2b2a26] text-white text-sm">
-          검색
-        </button>
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-xl font-medium">사람</h1>
+        <div className="flex text-sm border border-[#ddd8ca] rounded-lg overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setTab("people")}
+            className={`px-3 py-1.5 ${tab === "people" ? "bg-[#2b2a26] text-white" : "bg-white text-[#2b2a26]"}`}
+          >
+            전체
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab("groups")}
+            className={`px-3 py-1.5 ${tab === "groups" ? "bg-[#2b2a26] text-white" : "bg-white text-[#2b2a26]"}`}
+          >
+            그룹별
+          </button>
+        </div>
       </div>
 
-      {!loading && people.length === 0 && <p className="text-sm text-[#7a7768]">등록된 참석자가 없습니다.</p>}
+      {tab === "people" ? (
+        <>
+          <div className="flex gap-2 mb-4">
+            <input
+              placeholder="이름으로 검색"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && load(q)}
+              className="flex-1"
+            />
+            <button type="button" onClick={() => load(q)} className="px-4 py-2 bg-[#2b2a26] text-white text-sm">
+              검색
+            </button>
+          </div>
 
-      <ul className="flex flex-col gap-2">
-        {people.map((p) => (
-          <li key={p.id}>
-            <Link href={`/people/${p.id}`} className="block border border-[#ddd8ca] rounded-lg p-3 bg-white no-underline text-[#2b2a26]">
-              <span className="font-medium">{p.name}</span>
-              {p.career && <span className="text-sm text-[#7a7768]"> · {p.career}</span>}
-            </Link>
-          </li>
-        ))}
-      </ul>
+          {!loading && people.length === 0 && <p className="text-sm text-[#7a7768]">등록된 참석자가 없습니다.</p>}
+
+          <ul className="flex flex-col gap-2">
+            {people.map((p) => (
+              <li key={p.id}>
+                <Link href={`/people/${p.id}`} className="block border border-[#ddd8ca] rounded-lg p-3 bg-white no-underline text-[#2b2a26]">
+                  <div className="flex justify-between items-baseline">
+                    <span className="font-medium">{p.name}</span>
+                    {p.career && <span className="text-sm text-[#7a7768]">{p.career}</span>}
+                  </div>
+                  <p className="text-xs text-[#a09c8c] mt-1">
+                    {p.lastMeetingDate ? (
+                      <>
+                        최근 모임 {p.lastMeetingDate} ({p.daysSinceLastMeeting === 0 ? "오늘" : `${p.daysSinceLastMeeting}일 경과`}) · 등록일{" "}
+                        {p.createdAt.slice(0, 10)}
+                      </>
+                    ) : (
+                      <>아직 모임 기록 없음 · 등록일 {p.createdAt.slice(0, 10)}</>
+                    )}
+                  </p>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : (
+        <GroupsPanel people={people} />
+      )}
     </div>
   );
 }

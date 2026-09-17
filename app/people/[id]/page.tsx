@@ -15,7 +15,11 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
   const person = await storage.getPerson(params.id);
   if (!person) notFound();
 
-  const meetings = await storage.search({ personId: params.id }); // 이미 최신 일자순 정렬됨
+  const [meetings, groups] = await Promise.all([
+    storage.search({ personId: params.id }), // 이미 최신 일자순 정렬됨
+    storage.listGroups(),
+  ]);
+  const memberOfGroups = groups.filter((g) => g.memberIds.includes(params.id));
 
   const stories = meetings
     .flatMap((m) => m.stories.filter((s) => s.personId === params.id).map((s) => ({ ...s, meetingDate: m.date, meetingId: m.id })))
@@ -30,12 +34,28 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
       <p className="text-sm text-[#7a7768] mb-1">
         {[person.age && `${person.age}세`, person.career, person.companyTitle].filter(Boolean).join(" · ") || "등록된 프로필 정보 없음"}
       </p>
+      <p className="text-xs text-[#a09c8c] mb-1">최초 등록일: {person.createdAt.slice(0, 10)}</p>
       {lastMeetingDate && daysSinceLastMeeting != null && (
-        <p className="text-sm text-[#b4622f] mb-6">
+        <p className="text-sm text-[#b4622f] mb-2">
           마지막 만남: {lastMeetingDate} ({daysSinceLastMeeting === 0 ? "오늘" : `${daysSinceLastMeeting}일 경과`})
         </p>
       )}
-      {!lastMeetingDate && <p className="text-sm text-[#7a7768] mb-6">아직 함께한 모임이 없습니다.</p>}
+      {!lastMeetingDate && <p className="text-sm text-[#7a7768] mb-2">아직 함께한 모임이 없습니다.</p>}
+
+      {memberOfGroups.length > 0 && (
+        <p className="text-xs text-[#7a7768] mb-6">
+          소속 그룹:{" "}
+          {memberOfGroups.map((g, i) => (
+            <span key={g.id}>
+              {i > 0 && ", "}
+              <Link href="/people?tab=groups" className="text-[#b4622f]">
+                {g.name}
+              </Link>
+            </span>
+          ))}
+        </p>
+      )}
+      {memberOfGroups.length === 0 && <div className="mb-6" />}
 
       <div className="bg-white border border-[#ddd8ca] rounded-xl p-4 mb-4">
         <p className="text-xs text-[#a09c8c] mb-2">참석한 모임 ({meetings.length}건)</p>

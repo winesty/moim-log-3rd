@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getStorage } from "@/lib/storage";
 import { Place } from "@/lib/types";
+import { sortPlacesByName } from "@/lib/storage/searchHelper";
 import { nanoid } from "nanoid";
 
 export const dynamic = "force-dynamic";
@@ -9,7 +10,7 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest) {
   const storage = await getStorage();
   const q = req.nextUrl.searchParams.get("q") ?? undefined;
-  const places = q ? await storage.searchPlaces({ q }) : await storage.listPlaces();
+  const places = q ? await storage.searchPlaces({ q }) : sortPlacesByName(await storage.listPlaces());
   return NextResponse.json(places);
 }
 

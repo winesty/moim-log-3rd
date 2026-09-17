@@ -6,6 +6,7 @@ import AddStopForm from "@/components/AddStopForm";
 import DeleteStopButton from "@/components/DeleteStopButton";
 import DeleteMeetingButton from "@/components/DeleteMeetingButton";
 import { latestMenuSnapshot } from "@/lib/storage/searchHelper";
+import { formatMeetingDuration } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +41,7 @@ export default async function MeetingDetailPage({ params }: { params: { id: stri
         <DeleteMeetingButton meetingId={meeting.id} />
       </div>
       <p className="text-sm text-[#7a7768] mb-1">{attendees.map((a) => a.name).join(", ")}</p>
+      {formatMeetingDuration(meeting) && <p className="text-sm text-[#a09c8c] mb-1">기간: {formatMeetingDuration(meeting)}</p>}
       {totalAmount > 0 && <p className="text-sm text-[#a09c8c] mb-4">전체 금액: {totalAmount.toLocaleString()}원</p>}
 
       <div className="flex flex-col gap-4 mb-6">
