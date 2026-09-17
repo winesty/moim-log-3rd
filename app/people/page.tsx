@@ -24,6 +24,12 @@ export default function PeoplePage() {
     load();
   }, []);
 
+  async function remove(p: PersonWithStats) {
+    if (!confirm(`"${p.name}"을(를) 삭제할까요? 이미 기록된 모임/이야기는 남아있지만 이름 연결이 사라집니다.`)) return;
+    await fetch(`/api/people/${p.id}`, { method: "DELETE" });
+    load(q);
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
@@ -65,8 +71,8 @@ export default function PeoplePage() {
 
           <ul className="flex flex-col gap-2">
             {people.map((p) => (
-              <li key={p.id}>
-                <Link href={`/people/${p.id}`} className="block border border-[#ddd8ca] rounded-lg p-3 bg-white no-underline text-[#2b2a26]">
+              <li key={p.id} className="border border-[#ddd8ca] rounded-lg p-3 bg-white flex items-center gap-2">
+                <Link href={`/people/${p.id}`} className="flex-1 no-underline text-[#2b2a26]">
                   <div className="flex justify-between items-baseline">
                     <span className="font-medium">{p.name}</span>
                     {p.career && <span className="text-sm text-[#7a7768]">{p.career}</span>}
@@ -82,6 +88,13 @@ export default function PeoplePage() {
                     )}
                   </p>
                 </Link>
+                <button
+                  type="button"
+                  onClick={() => remove(p)}
+                  className="text-xs px-2 py-1.5 border border-[#e0b3a3] text-[#a34a3a] bg-white whitespace-nowrap"
+                >
+                  삭제
+                </button>
               </li>
             ))}
           </ul>

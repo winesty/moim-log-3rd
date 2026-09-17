@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getStorage } from "@/lib/storage";
+import DeletePersonButton from "@/components/DeletePersonButton";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +31,10 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
 
   return (
     <div>
-      <h1 className="text-xl font-medium mb-1">{person.name}</h1>
+      <div className="flex items-start justify-between mb-1">
+        <h1 className="text-xl font-medium">{person.name}</h1>
+        <DeletePersonButton personId={person.id} name={person.name} />
+      </div>
       <p className="text-sm text-[#7a7768] mb-1">
         {[person.age && `${person.age}세`, person.career, person.companyTitle].filter(Boolean).join(" · ") || "등록된 프로필 정보 없음"}
       </p>
