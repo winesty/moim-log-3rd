@@ -57,7 +57,7 @@ export interface StorageProvider {
   search(query: SearchQuery): Promise<MeetingSearchResult[]>;
 
   // --- 시트 가져오기 (한 번에 읽고 한 번에 쓰기) ---
-  bulkImport(data: BulkImportData): Promise<void>;
+  bulkImport(data: BulkImportData): Promise<BulkImportResult>;
   listImportBatches(): Promise<ImportBatchSummary[]>;
   removeImportBatch(batchId: string, force?: boolean): Promise<RemoveImportBatchResult>;
 }
@@ -67,6 +67,15 @@ export interface BulkImportData {
   places?: Place[];
   people?: Person[];
   meetings?: Meeting[];
+}
+
+/** 네 파일 중 실제로 어떤 것이 쓰기에 성공/실패했는지 (동시에 쓰기 때문에 일부만 실패할 수 있다) */
+export interface BulkImportResult {
+  categories: boolean;
+  places: boolean;
+  people: boolean;
+  meetings: boolean;
+  errors: string[];
 }
 
 export interface ImportBatchSummary {

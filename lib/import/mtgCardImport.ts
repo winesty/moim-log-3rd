@@ -31,6 +31,11 @@ const REQUIRED_HEADERS = ["No.", "mgmtNo", "Date", "where", ...STORY_COLUMNS.map
 
 const DATA_COLUMNS = ["where", ...STORY_COLUMNS.map((c) => c.column), ...PROFILE_COLUMNS.map((c) => c.column)];
 
+// Career/기타 같은 자유 서술 칸에 학력 관련 단어가 섞여 있으면(예: "...스페인 신생 MBA와 Finance 동시 취득"),
+// 원래 카테고리(#커리어 등)는 유지한 채로 #학력 태그도 같이 붙여서 학력으로도 찾을 수 있게 한다.
+// School 칸처럼 정확한 값이 아니라 문장 속 단어를 보고 판단하는 것이라 완벽하지는 않다.
+const EDUCATION_KEYWORDS = /(대학원|대학교|초\s*중\s*고|초등학교|중학교|고등학교|고교|학번|MBA|전공|졸업|석사|박사|학사|유학|응용통계|어학연수)/;
+
 export interface ImportOptions {
   /** 같은 날짜 + 같은 장소에 여러 사람이 적혀 있으면 한 번의 모임으로 묶는다 */
   groupGatherings: boolean;
@@ -365,6 +370,7 @@ export function buildImportPlan(csvText: string, existing: ExistingData, options
 
   const meetings: Meeting[] = [];
   const rowMeeting = new Map<string, Meeting>(); // rowNo → 그 행이 들어간 모임
+  const educationTaggedDetails: string[] = [];
   groups.forEach((rows) => {
     const stories: StoryEntry[] = [];
     for (const r of rows) {
@@ -372,11 +378,17 @@ export function buildImportPlan(csvText: string, existing: ExistingData, options
       for (const { column, label } of STORY_COLUMNS) {
         const text = cell(r.raw, column);
         if (!text) continue;
+        const categoryIds = [categoryIdByLabel.get(label)!];
+        const educationCatId = categoryIdByLabel.get("학력");
+        if (educationCatId && EDUCATION_KEYWORDS.test(text)) {
+          categoryIds.push(educationCatId);
+          educationTaggedDetails.push(`No. ${r.rowNo} · ${label}: ${text.length > 40 ? text.slice(0, 40) + "…" : text}`);
+        }
         stories.push({
           id: nanoid(),
           personId,
           content: `#${label} ${text}`,
-          categoryIds: [categoryIdByLabel.get(label)!],
+          categoryIds,
           createdAt: `${r.date}T00:00:00.000Z`,
         });
       }
@@ -397,6 +409,13 @@ export function buildImportPlan(csvText: string, existing: ExistingData, options
     meetings.push(meeting);
     rows.forEach((r) => rowMeeting.set(r.rowNo, meeting));
   });
+
+  if (educationTaggedDetails.length > 0)
+    review.push({
+      kind: "education-tagged",
+      message: `커리어 등 서술 칸 안에 학교·전공·MBA 같은 학력 관련 단어가 있어 '학력'으로도 함께 분류한 이야기 ${educationTaggedDetails.length}건 (원래 카테고리는 그대로 두고 학력을 추가한 것 — 키워드 기반이라 완벽하지 않을 수 있어요)`,
+      details: educationTaggedDetails,
+    });
 
   // ---------- 6. 숫자 검증 ----------
   const checks: VerificationCheck[] = [];

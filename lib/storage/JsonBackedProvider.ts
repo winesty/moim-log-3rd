@@ -1,4 +1,4 @@
-import { StorageProvider, BulkImportData, ImportBatchSummary, RemoveImportBatchResult } from "./StorageProvider";
+import { StorageProvider, BulkImportData, BulkImportResult, ImportBatchSummary, RemoveImportBatchResult } from "./StorageProvider";
 import {
   Meeting,
   Person,
@@ -237,23 +237,55 @@ export abstract class JsonBackedProvider implements StorageProvider {
    * 느리고 중간에 끊기기 쉬우므로, 파일마다 한 번 읽고 한 번 쓴다.
    * 쓰는 순서는 카테고리 → 장소 → 사람 → 모임 (모임이 마지막이라, 중간에 끊겨도 가져오기 표시(importBatchId)로 되돌릴 수 있다).
    */
-  async bulkImport(data: BulkImportData): Promise<void> {
-    if (data.categories?.length) {
-      const all = await this.listCategories();
-      await this.writeFile(FILES.categories, [...all, ...data.categories]);
-    }
-    if (data.places?.length) {
-      const all = await this.listPlaces();
-      await this.writeFile(FILES.places, [...all, ...data.places]);
-    }
-    if (data.people?.length) {
-      const all = await this.listPeople();
-      await this.writeFile(FILES.people, [...all, ...data.people]);
-    }
-    if (data.meetings?.length) {
-      const all = await this.listMeetings();
-      await this.writeFile(FILES.meetings, [...all, ...data.meetings]);
-    }
+  async bulkImport(data: BulkImportData): Promise<BulkImportResult> {
+    // 네 파일은 서로 참조하지 않는 독립된 JSON이므로 동시에 쓴다. 특히 구글 드라이브는
+    // 파일 하나 쓸 때마다 네트워크 왕복이 여러 번 걸려서, 순서대로 쓰면(카테고리→장소→
+    // 사람→모임) 서버리스 함수의 실행 시간 제한에 걸려 마지막 파일(주로 용량이 큰 모임)이
+    // 통째로 빠지는 일이 있었다. 동시에 쓰면 전체 소요 시간이 가장 느린 파일 하나만큼으로 줄고,
+    // allSettled라 한 파일이 실패해도 나머지는 그대로 저장된 채 어느 파일이 실패했는지 알 수 있다.
+    const jobs: { key: keyof Omit<BulkImportResult, "errors">; run: () => Promise<void> }[] = [
+      {
+        key: "categories",
+        run: async () => {
+          if (!data.categories?.length) return;
+          const all = await this.listCategories();
+          await this.writeFile(FILES.categories, [...all, ...data.categories]);
+        },
+      },
+      {
+        key: "places",
+        run: async () => {
+          if (!data.places?.length) return;
+          const all = await this.listPlaces();
+          await this.writeFile(FILES.places, [...all, ...data.places]);
+        },
+      },
+      {
+        key: "people",
+        run: async () => {
+          if (!data.people?.length) return;
+          const all = await this.listPeople();
+          await this.writeFile(FILES.people, [...all, ...data.people]);
+        },
+      },
+      {
+        key: "meetings",
+        run: async () => {
+          if (!data.meetings?.length) return;
+          const all = await this.listMeetings();
+          await this.writeFile(FILES.meetings, [...all, ...data.meetings]);
+        },
+      },
+    ];
+    const settled = await Promise.allSettled(jobs.map((j) => j.run()));
+    const result: BulkImportResult = { categories: true, places: true, people: true, meetings: true, errors: [] };
+    settled.forEach((r, i) => {
+      if (r.status === "rejected") {
+        result[jobs[i].key] = false;
+        result.errors.push(`${jobs[i].key}: ${r.reason?.message ?? String(r.reason)}`);
+      }
+    });
+    return result;
   }
 
   async listImportBatches(): Promise<ImportBatchSummary[]> {
