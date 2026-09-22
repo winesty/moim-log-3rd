@@ -36,22 +36,24 @@ export async function POST(req: NextRequest) {
     orderedItems: (s.orderedItems ?? []).filter((it: OrderedItem) => it.name?.trim() && it.quantity > 0),
   }));
 
+  // body.id/body.createdAt이 있으면 기존 모임을 편집하는 것 (편집 화면에서 보냄). 없으면 새 모임.
   const meeting: Meeting = {
-    id: nanoid(),
+    id: body.id || nanoid(),
     date: body.date,
     time: body.time,
     endDate: body.endDate || undefined,
     endTime: body.endTime || undefined,
     attendeeIds: body.attendeeIds ?? [],
     stops,
+    // 이야기도 마찬가지: id가 딸려 온 건 원래 작성일을 그대로 지키고, id가 없는 새 이야기만 지금 시각으로 만든다.
     stories: (body.stories ?? []).map((s: any) => ({
-      id: nanoid(),
+      id: s.id || nanoid(),
       personId: s.personId,
       content: s.content,
       categoryIds: s.categoryIds ?? [],
-      createdAt: now,
+      createdAt: s.createdAt || now,
     })),
-    createdAt: now,
+    createdAt: body.createdAt || now,
     updatedAt: now,
   };
 

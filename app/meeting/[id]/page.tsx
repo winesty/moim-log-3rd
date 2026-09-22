@@ -1,6 +1,7 @@
 import { getStorage } from "@/lib/storage";
 import { personLabels } from "@/lib/personDisplay";
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import AddStoryForm from "@/components/AddStoryForm";
 import AddOrderedItemForm from "@/components/AddOrderedItemForm";
 import AddStopForm from "@/components/AddStopForm";
@@ -44,7 +45,15 @@ export default async function MeetingDetailPage({ params }: { params: { id: stri
         <h1 className="text-xl font-medium">
           {meeting.date} {meeting.time}
         </h1>
-        <DeleteMeetingButton meetingId={meeting.id} />
+        <div className="flex gap-2">
+          <Link
+            href={`/meeting/${meeting.id}/edit`}
+            className="text-sm px-3 py-1.5 border border-[#ddd8ca] bg-white no-underline text-[#2b2a26] rounded-lg"
+          >
+            편집
+          </Link>
+          <DeleteMeetingButton meetingId={meeting.id} />
+        </div>
       </div>
       <p className="text-sm text-[#7a7768] mb-1">
         {[...presentGroups.map((g) => `${g.name} 그룹`), ...soloAttendees.map((a) => labels.get(a.id) ?? a.name)].join(", ")}

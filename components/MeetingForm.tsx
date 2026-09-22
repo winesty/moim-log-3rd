@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Person, Place, StoryCategory, MenuSnapshot, Group, formatMeetingDuration, derivePresentGroups } from "@/lib/types";
 import { findPlacesByName, sortPlacesByName } from "@/lib/storage/searchHelper";
 import { personLabels } from "@/lib/personDisplay";
 
-type StoryDraft = { tempId: string; personId: string; content: string };
+type StoryDraft = { tempId: string; id?: string; personId: string; content: string; createdAt?: string };
 type OrderRow = { name: string; price: string; qty: string };
 type StopDraft = {
   tempId: string;
@@ -68,16 +68,45 @@ function buildOrderedItemsForStop(stop: StopDraft) {
   return items;
 }
 
+export interface EditableMeetingDraft {
+  date: string;
+  time: string;
+  endDate?: string;
+  endTime?: string;
+  attendeeIds: string[];
+  stops: { label: string; placeId: string; amount?: number; orderedItems: { name: string; price?: number; quantity: number }[] }[];
+  stories: { id: string; personId: string; content: string; createdAt: string }[];
+}
+
+function draftStopsFromInitial(stops: EditableMeetingDraft["stops"]): StopDraft[] {
+  return stops.map((s) => ({
+    ...makeStopDraft(s.label),
+    placeId: s.placeId,
+    amount: s.amount != null ? String(s.amount) : "",
+    // 기존 주문 내역은 '메뉴에 없는 항목' 자유 입력 칸으로 옮겨서, 그 자리에서 이름/가격/수량을 그대로 고치거나 지울 수 있게 한다.
+    // (현재 장소 메뉴 체크박스는 최신 메뉴 기준이라, 주문 당시와 항목 id가 다를 수 있어 그대로 매칭하지 않는다)
+    newOrderRows: s.orderedItems.map((it) => ({ name: it.name, price: it.price != null ? String(it.price) : "", qty: String(it.quantity) })),
+  }));
+}
+
 export default function MeetingForm({
   initialPeople,
   initialPlaces,
   initialCategories,
   initialGroups,
+  mode = "create",
+  meetingId,
+  initialMeetingCreatedAt,
+  initialDraft,
 }: {
   initialPeople: Person[];
   initialPlaces: Place[];
   initialCategories: StoryCategory[];
   initialGroups: Group[];
+  mode?: "create" | "edit";
+  meetingId?: string;
+  initialMeetingCreatedAt?: string;
+  initialDraft?: EditableMeetingDraft;
 }) {
   const router = useRouter();
 
@@ -86,22 +115,38 @@ export default function MeetingForm({
   const [categories, setCategories] = useState(initialCategories);
   const [groups] = useState(initialGroups);
 
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [time, setTime] = useState("19:00");
-  const [showDuration, setShowDuration] = useState(false);
-  const [endDate, setEndDate] = useState("");
-  const [endTime, setEndTime] = useState("");
+  const [date, setDate] = useState(() => initialDraft?.date ?? new Date().toISOString().slice(0, 10));
+  const [time, setTime] = useState(initialDraft?.time ?? "19:00");
+  const [showDuration, setShowDuration] = useState(!!(initialDraft?.endDate || initialDraft?.endTime));
+  const [endDate, setEndDate] = useState(initialDraft?.endDate ?? "");
+  const [endTime, setEndTime] = useState(initialDraft?.endTime ?? "");
 
-  const [stops, setStops] = useState<StopDraft[]>([makeStopDraft("1차")]);
+  const [stops, setStops] = useState<StopDraft[]>(() =>
+    initialDraft ? draftStopsFromInitial(initialDraft.stops) : [makeStopDraft("1차")]
+  );
   const [activeStopIdx, setActiveStopIdx] = useState(0);
 
-  const [attendeeIds, setAttendeeIds] = useState<string[]>([]);
+  const [attendeeIds, setAttendeeIds] = useState<string[]>(initialDraft?.attendeeIds ?? []);
   const [attendeePick, setAttendeePick] = useState("");
   const [newPersonName, setNewPersonName] = useState("");
 
-  const [stories, setStories] = useState<StoryDraft[]>([]);
+  const [stories, setStories] = useState<StoryDraft[]>(
+    () => initialDraft?.stories.map((s) => ({ tempId: crypto.randomUUID(), id: s.id, personId: s.personId, content: s.content, createdAt: s.createdAt })) ?? []
+  );
   const [newCategoryLabel, setNewCategoryLabel] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // 편집 모드에서는 기존에 골라둔 장소의 '현재 메뉴'를 화면에 띄워서, 필요하면 거기서도 더 골라 담을 수 있게 한다.
+  useEffect(() => {
+    if (!initialDraft) return;
+    initialDraft.stops.forEach((s, idx) => {
+      if (!s.placeId) return;
+      fetch(`/api/places/${s.placeId}`)
+        .then((r) => r.json())
+        .then((data) => updateStop(idx, { currentMenu: data.currentMenu ?? null }));
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function updateStop(idx: number, patch: Partial<StopDraft>) {
     setStops((prev) => prev.map((s, i) => (i === idx ? { ...s, ...patch } : s)));
@@ -280,6 +325,7 @@ export default function MeetingForm({
     }
     setSaving(true);
     const payload = {
+      ...(mode === "edit" ? { id: meetingId, createdAt: initialMeetingCreatedAt } : {}),
       date,
       time,
       endDate: endDate || undefined,
@@ -294,6 +340,9 @@ export default function MeetingForm({
       stories: stories
         .filter((s) => s.content.trim())
         .map((s) => ({
+          // 기존 이야기는 id·작성일을 그대로 돌려보내 원래 작성일이 유지되게 하고, 새로 쓴 이야기는
+          // id가 없으니 서버가 오늘 날짜로 새로 만든다.
+          ...(s.id ? { id: s.id, createdAt: s.createdAt } : {}),
           personId: s.personId,
           content: s.content.trim(),
           categoryIds: categoryIdsInContent(s.content),
@@ -305,7 +354,7 @@ export default function MeetingForm({
       body: JSON.stringify(payload),
     });
     setSaving(false);
-    if (res.ok) router.push("/");
+    if (res.ok) router.push(mode === "edit" ? `/meeting/${meetingId}` : "/");
     else alert("저장에 실패했습니다.");
   }
 
@@ -624,20 +673,29 @@ export default function MeetingForm({
           <div className="flex flex-col gap-3">
             {stories.map((s) => (
               <div key={s.tempId} className="bg-[#faf8f3] rounded-lg p-3">
-                {attendeeIds.length > 1 && (
-                  <div className="flex items-center gap-2 mb-2">
-                    <label className="text-xs text-[#7a7768]">대상</label>
-                    <select value={s.personId} onChange={(e) => updateStory(s.tempId, { personId: e.target.value })} className="flex-1">
-                      {attendeeIds.map((id) => (
-                        <option key={id} value={id}>
-                          {nameOf(id)}
-                        </option>
-                      ))}
-                    </select>
-                    <button type="button" onClick={() => removeStory(s.tempId)} className="text-xs text-[#7a7768]">
-                      삭제
-                    </button>
-                  </div>
+                <div className="flex items-center gap-2 mb-2">
+                  {attendeeIds.length > 1 ? (
+                    <>
+                      <label className="text-xs text-[#7a7768]">대상</label>
+                      <select value={s.personId} onChange={(e) => updateStory(s.tempId, { personId: e.target.value })} className="flex-1">
+                        {attendeeIds.map((id) => (
+                          <option key={id} value={id}>
+                            {nameOf(id)}
+                          </option>
+                        ))}
+                      </select>
+                    </>
+                  ) : (
+                    <span className="text-xs text-[#a09c8c] flex-1">
+                      {s.createdAt ? `${s.createdAt.slice(0, 10)} 작성` : "오늘 작성"}
+                    </span>
+                  )}
+                  <button type="button" onClick={() => removeStory(s.tempId)} className="text-xs text-[#a34a3a]">
+                    삭제
+                  </button>
+                </div>
+                {attendeeIds.length > 1 && s.createdAt && (
+                  <p className="text-xs text-[#a09c8c] mb-1">{s.createdAt.slice(0, 10)} 작성</p>
                 )}
                 <textarea
                   placeholder="나눈 이야기를 적어주세요 (#카테고리 형태로 태그를 붙일 수 있어요)"
@@ -688,14 +746,24 @@ export default function MeetingForm({
         </p>
       )}
 
-      <button
-        type="button"
-        onClick={handleSubmit}
-        disabled={saving}
-        className="w-full py-3 bg-[#2b2a26] text-white text-sm disabled:opacity-50"
-      >
-        {saving ? "저장 중..." : "모임 저장"}
-      </button>
+      <div className="flex gap-2">
+        {mode === "edit" && (
+          <Link
+            href={`/meeting/${meetingId}`}
+            className="flex-1 py-3 border border-[#ddd8ca] bg-white text-sm text-center no-underline text-[#2b2a26]"
+          >
+            취소
+          </Link>
+        )}
+        <button
+          type="button"
+          onClick={handleSubmit}
+          disabled={saving}
+          className="flex-1 py-3 bg-[#2b2a26] text-white text-sm disabled:opacity-50"
+        >
+          {saving ? "저장 중..." : mode === "edit" ? "수정 저장" : "모임 저장"}
+        </button>
+      </div>
     </div>
   );
 }

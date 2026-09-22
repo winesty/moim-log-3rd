@@ -4,9 +4,11 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Place } from "@/lib/types";
 
+type PlaceWithStats = Place & { lastMeetingDate: string | null };
+
 export default function PlacesPage() {
   const [q, setQ] = useState("");
-  const [places, setPlaces] = useState<Place[]>([]);
+  const [places, setPlaces] = useState<PlaceWithStats[]>([]);
   const [loading, setLoading] = useState(true);
 
   async function load(query?: string) {
@@ -20,7 +22,7 @@ export default function PlacesPage() {
     load();
   }, []);
 
-  async function remove(p: Place) {
+  async function remove(p: PlaceWithStats) {
     if (!confirm(`"${p.name}"을(를) 삭제할까요? 이 장소의 메뉴 이력도 함께 사라집니다. (이 장소가 연결된 모임 기록은 남아있지만 장소 정보가 비어보일 수 있어요)`)) return;
     await fetch(`/api/places/${p.id}`, { method: "DELETE" });
     load(q);
@@ -68,6 +70,10 @@ export default function PlacesPage() {
               <p className="text-sm text-[#7a7768]">
                 {[p.city, p.gu, p.street].filter(Boolean).join(" ") || "주소 미등록"}
                 {p.category ? ` · ${p.category}` : ""}
+              </p>
+              <p className="text-xs text-[#a09c8c]">
+                등록일 {p.createdAt.slice(0, 10)}
+                {p.lastMeetingDate ? ` · 최근 모임 ${p.lastMeetingDate}` : ""}
               </p>
             </Link>
             <button
