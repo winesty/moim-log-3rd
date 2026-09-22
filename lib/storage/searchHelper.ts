@@ -9,6 +9,7 @@ import {
   PlaceSearchQuery,
   derivePresentGroups,
 } from "@/lib/types";
+import { personLabels } from "@/lib/personDisplay";
 
 /** 장소별 메뉴 스냅샷 중 effectiveDate가 가장 최신인 것을 반환 */
 export function latestMenuSnapshot(
@@ -37,6 +38,9 @@ export function searchMeetingsInMemory(
   query: SearchQuery
 ): MeetingSearchResult[] {
   const peopleById = new Map(people.map((p) => [p.id, p]));
+  // 화면에 보여줄 참석자 이름: 같은 이름이 여럿이면 최초 만난 일자를 덧붙여 구분
+  const labels = personLabels(people);
+  const forDisplay = (p: Person): Person => ({ ...p, name: labels.get(p.id) ?? p.name });
   const placesById = new Map(places.map((p) => [p.id, p]));
 
   const q = query.q?.trim().toLowerCase();
@@ -84,9 +88,9 @@ export function searchMeetingsInMemory(
       return {
         ...m,
         stops: m.stops.map((s) => ({ ...s, place: placesById.get(s.placeId) ?? null })),
-        attendees,
+        attendees: attendees.map(forDisplay),
         presentGroups,
-        soloAttendees: attendees.filter((a) => !coveredIds.has(a.id)),
+        soloAttendees: attendees.filter((a) => !coveredIds.has(a.id)).map(forDisplay),
       };
     })
     .sort((a, b) => (a.date < b.date ? 1 : -1));

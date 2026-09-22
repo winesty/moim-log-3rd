@@ -7,6 +7,7 @@ export interface StoryCategory {
   label: string;
   isDefault: boolean;
   createdAt: string;
+  importBatchId?: string; // 시트 가져오기로 만들어진 경우, 되돌리기용 표시
 }
 
 export interface Person {
@@ -20,6 +21,11 @@ export interface Person {
   network?: string;
   hobby?: string;
   etc?: string;
+  /** 예전 시트의 관리번호(이름-날짜). 이름이 같은 사람을 구분하는 용도로만 보관하고, 사람을 가리키는 열쇠는 id */
+  legacyMgmtNo?: string;
+  /** 최초 만난 일자 (YYYY-MM-DD) */
+  firstMetDate?: string;
+  importBatchId?: string; // 시트 가져오기로 만들어진 경우, 되돌리기용 표시
   createdAt: string;
   updatedAt: string;
 }
@@ -43,6 +49,7 @@ export interface Place {
   operatingStatus: OperatingStatus;
   lastCheckedAt?: string; // 운영상태를 마지막으로 확인한 일자
   note?: string; // 장소 자체에 대한 메모 (구글 시트 remark 등에서 이관)
+  importBatchId?: string; // 시트 가져오기로 만들어진 경우, 되돌리기용 표시
   createdAt: string; // 최초 등록일
   updatedAt: string;
 }
@@ -102,6 +109,10 @@ export interface Meeting {
   attendeeIds: ID[];
   stops: Stop[]; // 최소 1개
   stories: StoryEntry[];
+  /** 시트 가져오기로 만들어진 모임의 출처 표시 (같은 행을 두 번 가져오지 않기 위한 확인용) */
+  importSource?: string;
+  importRowNos?: string[]; // 원본 시트의 No. 값들
+  importBatchId?: string;
   createdAt: string;
   updatedAt: string;
 }

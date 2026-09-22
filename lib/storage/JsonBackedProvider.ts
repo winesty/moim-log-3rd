@@ -1,4 +1,4 @@
-import { StorageProvider } from "./StorageProvider";
+import { StorageProvider, BulkImportData, ImportBatchSummary, RemoveImportBatchResult } from "./StorageProvider";
 import {
   Meeting,
   Person,
@@ -229,5 +229,94 @@ export abstract class JsonBackedProvider implements StorageProvider {
       this.listGroups(),
     ]);
     return searchMeetingsInMemory(meetings, people, places, menus, groups, query);
+  }
+
+  // --- 시트 가져오기 ---
+  /**
+   * 여러 건을 한 번에 저장한다. 건마다 저장하면 구글 드라이브를 수백 번 오가야 해서
+   * 느리고 중간에 끊기기 쉬우므로, 파일마다 한 번 읽고 한 번 쓴다.
+   * 쓰는 순서는 카테고리 → 장소 → 사람 → 모임 (모임이 마지막이라, 중간에 끊겨도 가져오기 표시(importBatchId)로 되돌릴 수 있다).
+   */
+  async bulkImport(data: BulkImportData): Promise<void> {
+    if (data.categories?.length) {
+      const all = await this.listCategories();
+      await this.writeFile(FILES.categories, [...all, ...data.categories]);
+    }
+    if (data.places?.length) {
+      const all = await this.listPlaces();
+      await this.writeFile(FILES.places, [...all, ...data.places]);
+    }
+    if (data.people?.length) {
+      const all = await this.listPeople();
+      await this.writeFile(FILES.people, [...all, ...data.people]);
+    }
+    if (data.meetings?.length) {
+      const all = await this.listMeetings();
+      await this.writeFile(FILES.meetings, [...all, ...data.meetings]);
+    }
+  }
+
+  async listImportBatches(): Promise<ImportBatchSummary[]> {
+    const [people, places, meetings, categories] = await Promise.all([
+      this.listPeople(),
+      this.listPlaces(),
+      this.listMeetings(),
+      this.listCategories(),
+    ]);
+    const batches = new Map<string, ImportBatchSummary>();
+    // 가져온 시각은 batchId(mtgcard-YYYYMMDDHHMMSS-…)에 들어 있다. (사람/장소의 createdAt은 '최초 만난 일자'라 쓰지 않는다)
+    const importedAtOf = (id: string) => {
+      const m = id.match(/^[^-]+-(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/);
+      return m ? `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}.000Z` : "";
+    };
+    const touch = (id: string | undefined, key: "people" | "places" | "meetings" | "categories") => {
+      if (!id) return;
+      const b = batches.get(id) ?? { batchId: id, importedAt: importedAtOf(id), people: 0, places: 0, meetings: 0, categories: 0 };
+      b[key]++;
+      batches.set(id, b);
+    };
+    people.forEach((x) => touch(x.importBatchId, "people"));
+    places.forEach((x) => touch(x.importBatchId, "places"));
+    meetings.forEach((x) => touch(x.importBatchId, "meetings"));
+    categories.forEach((x) => touch(x.importBatchId, "categories"));
+    return Array.from(batches.values()).sort((a, b) => (a.importedAt < b.importedAt ? 1 : -1));
+  }
+
+  async removeImportBatch(batchId: string, force = false): Promise<RemoveImportBatchResult> {
+    const [people, places, meetings, categories] = await Promise.all([
+      this.listPeople(),
+      this.listPlaces(),
+      this.listMeetings(),
+      this.listCategories(),
+    ]);
+    const batchPeople = new Set(people.filter((p) => p.importBatchId === batchId).map((p) => p.id));
+    const batchPlaces = new Set(places.filter((p) => p.importBatchId === batchId).map((p) => p.id));
+
+    // 가져온 뒤에 사용자가 새로 만든 모임이 가져온 사람/장소를 쓰고 있으면, 지우면 그 기록이 깨진다.
+    const dependents = meetings.filter(
+      (m) =>
+        m.importBatchId !== batchId &&
+        (m.attendeeIds.some((id) => batchPeople.has(id)) || m.stops.some((s) => batchPlaces.has(s.placeId)))
+    );
+    if (dependents.length > 0 && !force) {
+      return { removed: { people: 0, places: 0, meetings: 0, categories: 0 }, blockedByMeetings: dependents.length };
+    }
+
+    const keepMeetings = meetings.filter((m) => m.importBatchId !== batchId);
+    const keepPeople = people.filter((p) => p.importBatchId !== batchId);
+    const keepPlaces = places.filter((p) => p.importBatchId !== batchId);
+    const keepCategories = categories.filter((c) => c.importBatchId !== batchId);
+    const removed = {
+      meetings: meetings.length - keepMeetings.length,
+      people: people.length - keepPeople.length,
+      places: places.length - keepPlaces.length,
+      categories: categories.length - keepCategories.length,
+    };
+    // 가져올 때의 반대 순서: 모임 → 사람 → 장소 → 카테고리
+    if (removed.meetings) await this.writeFile(FILES.meetings, keepMeetings);
+    if (removed.people) await this.writeFile(FILES.people, keepPeople);
+    if (removed.places) await this.writeFile(FILES.places, keepPlaces);
+    if (removed.categories) await this.writeFile(FILES.categories, keepCategories);
+    return { removed };
   }
 }

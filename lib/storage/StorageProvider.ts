@@ -55,4 +55,31 @@ export interface StorageProvider {
 
   // --- 검색 ---
   search(query: SearchQuery): Promise<MeetingSearchResult[]>;
+
+  // --- 시트 가져오기 (한 번에 읽고 한 번에 쓰기) ---
+  bulkImport(data: BulkImportData): Promise<void>;
+  listImportBatches(): Promise<ImportBatchSummary[]>;
+  removeImportBatch(batchId: string, force?: boolean): Promise<RemoveImportBatchResult>;
+}
+
+export interface BulkImportData {
+  categories?: StoryCategory[];
+  places?: Place[];
+  people?: Person[];
+  meetings?: Meeting[];
+}
+
+export interface ImportBatchSummary {
+  batchId: string;
+  importedAt: string;
+  people: number;
+  places: number;
+  meetings: number;
+  categories: number;
+}
+
+export interface RemoveImportBatchResult {
+  removed: { people: number; places: number; meetings: number; categories: number };
+  /** 가져온 사람/장소를 이후에 다른 모임이 쓰고 있어서 지우지 못한 경우 그 모임 수 */
+  blockedByMeetings?: number;
 }
