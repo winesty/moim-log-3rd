@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
     }
 
     const storage = await getStorage();
-    await storage.bulkImport({
+    const writeResult = await storage.bulkImport({
       categories: plan.categories,
       places: plan.places,
       people: plan.people,
@@ -74,6 +74,7 @@ export async function POST(req: NextRequest) {
       expected,
       saved: saved ?? { people: 0, places: 0, meetings: 0, categories: 0 },
       verified,
+      writeResult,
       report: plan.report,
     });
   } catch (e: any) {

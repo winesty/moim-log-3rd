@@ -23,6 +23,7 @@ type CommitResult = {
   expected: { people: number; places: number; meetings: number; categories: number };
   saved: { people: number; places: number; meetings: number; categories: number };
   verified: boolean;
+  writeResult?: { categories: boolean; places: boolean; people: boolean; meetings: boolean; errors: string[] };
 };
 
 export default function ImportPeoplePage() {
@@ -216,7 +217,17 @@ export default function ImportPeoplePage() {
         <div className="bg-white border border-[#ddd8ca] rounded-2xl p-5 mb-4 text-sm">
           <p className="font-medium mb-2">{result.verified ? "가져오기가 끝났고, 저장된 개수도 확인했어요" : "가져오기는 끝났지만 저장된 개수가 계획과 달라요"}</p>
           <p>사람 {result.saved.people}/{result.expected.people}명 · 모임 {result.saved.meetings}/{result.expected.meetings}건 · 새 장소 {result.saved.places}/{result.expected.places}곳</p>
-          {!result.verified && <p className="text-[#a34a3a] mt-1">아래 '되돌리기'로 이번 가져오기를 취소한 뒤 다시 시도해 주세요.</p>}
+          {result.writeResult && result.writeResult.errors.length > 0 && (
+            <p className="text-[#a34a3a] mt-1">저장 중 오류: {result.writeResult.errors.join(" / ")}</p>
+          )}
+          {!result.verified && (
+            <p className="text-[#a34a3a] mt-1">
+              {result.writeResult && !result.writeResult.meetings
+                ? "모임 파일 저장이 끝나지 못했어요 (서버 실행 시간 제한일 수 있어요). "
+                : ""}
+              아래 '되돌리기'로 이번 가져오기를 취소한 뒤 다시 시도해 주세요.
+            </p>
+          )}
           <div className="flex gap-3 mt-3">
             <Link href="/people" className="text-[#b4622f]">사람 목록에서 확인하기</Link>
             <button type="button" onClick={() => undo(result.batchId)} className="text-[#a34a3a] underline">이번 가져오기 되돌리기</button>
