@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import NavLinks from "@/components/NavLinks";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -16,23 +17,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <Link href="/" className="text-lg font-medium text-[#2b2a26] no-underline">
               모임 기록
             </Link>
-            <nav className="flex gap-4 text-sm">
-              <Link href="/new" className="text-[#2b2a26] no-underline hover:text-[#b4622f]">
-                새 모임
-              </Link>
-              <Link href="/search" className="text-[#2b2a26] no-underline hover:text-[#b4622f]">
-                모임 검색
-              </Link>
-              <Link href="/places" className="text-[#2b2a26] no-underline hover:text-[#b4622f]">
-                장소
-              </Link>
-              <Link href="/people" className="text-[#2b2a26] no-underline hover:text-[#b4622f]">
-                사람
-              </Link>
-              <Link href="/categories" className="text-[#2b2a26] no-underline hover:text-[#b4622f]">
-                카테고리
-              </Link>
-            </nav>
+            <NavLinks />
           </header>
           <main className="py-6">{children}</main>
         </div>
