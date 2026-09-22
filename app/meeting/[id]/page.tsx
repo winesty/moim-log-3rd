@@ -1,4 +1,5 @@
 import { getStorage } from "@/lib/storage";
+import { personLabels } from "@/lib/personDisplay";
 import { notFound } from "next/navigation";
 import AddStoryForm from "@/components/AddStoryForm";
 import AddOrderedItemForm from "@/components/AddOrderedItemForm";
@@ -21,6 +22,7 @@ export default async function MeetingDetailPage({ params }: { params: { id: stri
     storage.listPlaces(),
     storage.listGroups(),
   ]);
+  const labels = personLabels(people);
   const attendees = people.filter((p) => meeting.attendeeIds.includes(p.id));
   const presentGroups = derivePresentGroups(meeting.attendeeIds, groups);
   const coveredIds = new Set(presentGroups.flatMap((g) => g.memberIds));
@@ -45,7 +47,7 @@ export default async function MeetingDetailPage({ params }: { params: { id: stri
         <DeleteMeetingButton meetingId={meeting.id} />
       </div>
       <p className="text-sm text-[#7a7768] mb-1">
-        {[...presentGroups.map((g) => `${g.name} 그룹`), ...soloAttendees.map((a) => a.name)].join(", ")}
+        {[...presentGroups.map((g) => `${g.name} 그룹`), ...soloAttendees.map((a) => labels.get(a.id) ?? a.name)].join(", ")}
       </p>
       {formatMeetingDuration(meeting) && <p className="text-sm text-[#a09c8c] mb-1">기간: {formatMeetingDuration(meeting)}</p>}
       {totalAmount > 0 && <p className="text-sm text-[#a09c8c] mb-4">전체 금액: {totalAmount.toLocaleString()}원</p>}
@@ -80,9 +82,9 @@ export default async function MeetingDetailPage({ params }: { params: { id: stri
           return (
             <div key={s.id} className="bg-white border border-[#ddd8ca] rounded-lg p-3">
               <p className="text-[11px] text-[#a09c8c] mb-1">
-                {person?.name} · {s.createdAt.slice(0, 10)} 작성
+                {person ? labels.get(person.id) ?? person.name : ""} · {s.createdAt.slice(0, 10)} 작성
               </p>
-              <p className="text-sm">{s.content}</p>
+              <p className="text-sm whitespace-pre-wrap">{s.content}</p>
             </div>
           );
         })}

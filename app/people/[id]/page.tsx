@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getStorage } from "@/lib/storage";
 import DeletePersonButton from "@/components/DeletePersonButton";
+import { personLabels, formatAge } from "@/lib/personDisplay";
 
 export const dynamic = "force-dynamic";
 
@@ -16,10 +17,12 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
   const person = await storage.getPerson(params.id);
   if (!person) notFound();
 
-  const [meetings, groups] = await Promise.all([
+  const [meetings, groups, allPeople] = await Promise.all([
     storage.search({ personId: params.id }), // 이미 최신 일자순 정렬됨
     storage.listGroups(),
+    storage.listPeople(),
   ]);
+  const displayName = personLabels(allPeople).get(person.id) ?? person.name;
   const memberOfGroups = groups.filter((g) => g.memberIds.includes(params.id));
 
   const stories = meetings
@@ -32,11 +35,11 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
   return (
     <div>
       <div className="flex items-start justify-between mb-1">
-        <h1 className="text-xl font-medium">{person.name}</h1>
+        <h1 className="text-xl font-medium">{displayName}</h1>
         <DeletePersonButton personId={person.id} name={person.name} />
       </div>
       <p className="text-sm text-[#7a7768] mb-1">
-        {[person.age && `${person.age}세`, person.career, person.companyTitle].filter(Boolean).join(" · ") || "등록된 프로필 정보 없음"}
+        {[formatAge(person), person.education, person.career, person.companyTitle].filter(Boolean).join(" · ") || "등록된 프로필 정보 없음"}
       </p>
       <p className="text-xs text-[#a09c8c] mb-1">최초 등록일: {person.createdAt.slice(0, 10)}</p>
       {lastMeetingDate && daysSinceLastMeeting != null && (
@@ -74,7 +77,7 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
       </div>
 
       <div className="bg-white border border-[#ddd8ca] rounded-xl p-4">
-        <p className="text-xs text-[#a09c8c] mb-2">{person.name}과 나눈 이야기 ({stories.length}건)</p>
+        <p className="text-xs text-[#a09c8c] mb-2">{displayName}과 나눈 이야기 ({stories.length}건)</p>
         {stories.length === 0 && <p className="text-sm text-[#7a7768]">아직 기록된 이야기가 없습니다.</p>}
         <div className="flex flex-col gap-2">
           {stories.map((s) => (
@@ -82,7 +85,7 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
               <p className="text-[11px] text-[#a09c8c] mb-1">
                 {s.createdAt.slice(0, 10)} 작성 · {s.meetingDate} 모임
               </p>
-              <p className="text-sm">{s.content}</p>
+              <p className="text-sm whitespace-pre-wrap">{s.content}</p>
             </div>
           ))}
         </div>

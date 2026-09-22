@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Person } from "@/lib/types";
 import GroupsPanel from "@/components/GroupsPanel";
+import { personLabels } from "@/lib/personDisplay";
 
 type PersonWithStats = Person & { lastMeetingDate: string | null; daysSinceLastMeeting: number | null };
 
@@ -24,6 +25,8 @@ export default function PeoplePage() {
     load();
   }, []);
 
+  const labels = personLabels(people);
+
   async function remove(p: PersonWithStats) {
     if (!confirm(`"${p.name}"을(를) 삭제할까요? 이미 기록된 모임/이야기는 남아있지만 이름 연결이 사라집니다.`)) return;
     await fetch(`/api/people/${p.id}`, { method: "DELETE" });
@@ -34,6 +37,9 @@ export default function PeoplePage() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-xl font-medium">사람</h1>
+        <Link href="/people/import" className="text-xs text-[#b4622f] mr-auto ml-3">
+          시트에서 가져오기
+        </Link>
         <div className="flex text-sm border border-[#ddd8ca] rounded-lg overflow-hidden">
           <button
             type="button"
@@ -74,7 +80,7 @@ export default function PeoplePage() {
               <li key={p.id} className="border border-[#ddd8ca] rounded-lg p-3 bg-white flex items-center gap-2">
                 <Link href={`/people/${p.id}`} className="flex-1 no-underline text-[#2b2a26]">
                   <div className="flex justify-between items-baseline">
-                    <span className="font-medium">{p.name}</span>
+                    <span className="font-medium">{labels.get(p.id) ?? p.name}</span>
                     {p.career && <span className="text-sm text-[#7a7768]">{p.career}</span>}
                   </div>
                   <p className="text-xs text-[#a09c8c] mt-1">

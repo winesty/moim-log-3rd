@@ -96,7 +96,7 @@ export default function SearchPage() {
                           <p className="text-[11px] text-[#a09c8c] mb-0.5">
                             {s.createdAt.slice(0, 10)} 작성{s.createdAt.slice(0, 10) !== m.date ? " · 나중에 추가됨" : ""}
                           </p>
-                          <p className="text-sm">{s.content}</p>
+                          <p className="text-sm whitespace-pre-wrap">{s.content}</p>
                         </div>
                       ))}
                   </div>
