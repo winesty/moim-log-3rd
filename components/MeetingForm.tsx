@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Person, Place, StoryCategory, MenuSnapshot, Group, formatMeetingDuration, derivePresentGroups } from "@/lib/types";
 import { findPlacesByName, sortPlacesByName } from "@/lib/storage/searchHelper";
+import { personLabels } from "@/lib/personDisplay";
 
 type StoryDraft = { tempId: string; personId: string; content: string };
 type OrderRow = { name: string; price: string; qty: string };
@@ -308,7 +309,8 @@ export default function MeetingForm({
     else alert("저장에 실패했습니다.");
   }
 
-  const nameOf = (id: string) => people.find((p) => p.id === id)?.name ?? "";
+  const labels = personLabels(people);
+  const nameOf = (id: string) => labels.get(id) ?? people.find((p) => p.id === id)?.name ?? "";
   const addressOf = (p: Place) => [p.city, p.gu, p.street].filter(Boolean).join(" ");
   const presentGroups = derivePresentGroups(attendeeIds, groups);
   const coveredByGroup = new Set(presentGroups.flatMap((g) => g.memberIds));
@@ -598,7 +600,7 @@ export default function MeetingForm({
                 .filter((p) => !attendeeIds.includes(p.id))
                 .map((p) => (
                   <option key={p.id} value={`person:${p.id}`}>
-                    {p.name}
+                    {labels.get(p.id) ?? p.name}
                   </option>
                 ))}
             </optgroup>

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Person, StoryCategory } from "@/lib/types";
+import { personLabels } from "@/lib/personDisplay";
 
 export default function AddStoryForm({
   meetingId,
@@ -14,6 +15,7 @@ export default function AddStoryForm({
   categories: StoryCategory[];
 }) {
   const router = useRouter();
+  const labels = personLabels(attendees);
   const [personId, setPersonId] = useState(attendees[0]?.id ?? "");
   const [content, setContent] = useState("");
   const [saving, setSaving] = useState(false);
@@ -42,7 +44,7 @@ export default function AddStoryForm({
         <select value={personId} onChange={(e) => setPersonId(e.target.value)} className="w-full mb-2">
           {attendees.map((a) => (
             <option key={a.id} value={a.id}>
-              {a.name}
+              {labels.get(a.id) ?? a.name}
             </option>
           ))}
         </select>
