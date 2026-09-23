@@ -7,7 +7,7 @@ import { Person, Place, StoryCategory, MenuSnapshot, Group, formatMeetingDuratio
 import { findPlacesByName, sortPlacesByName } from "@/lib/storage/searchHelper";
 import { personLabels } from "@/lib/personDisplay";
 
-type StoryDraft = { tempId: string; id?: string; personId: string; content: string; createdAt?: string };
+type StoryDraft = { tempId: string; id?: string; personId: string; content: string; createdAt?: string; stopId: string };
 type OrderRow = { name: string; price: string; qty: string };
 type StopDraft = {
   tempId: string;
@@ -19,9 +19,11 @@ type StopDraft = {
   orderQty: Record<string, string>;
   newOrderRows: OrderRow[];
   amount: string;
+  /** 이 차수에 있었던 사람들. 차수마다 인원이 다를 수 있어 차수별로 따로 관리한다. */
+  attendeeIds: string[];
 };
 
-function makeStopDraft(label: string): StopDraft {
+function makeStopDraft(label: string, attendeeIds: string[] = []): StopDraft {
   return {
     tempId: crypto.randomUUID(),
     label,
@@ -32,6 +34,7 @@ function makeStopDraft(label: string): StopDraft {
     orderQty: {},
     newOrderRows: [],
     amount: "",
+    attendeeIds,
   };
 }
 
@@ -73,14 +76,21 @@ export interface EditableMeetingDraft {
   time: string;
   endDate?: string;
   endTime?: string;
-  attendeeIds: string[];
-  stops: { label: string; placeId: string; amount?: number; orderedItems: { name: string; price?: number; quantity: number }[] }[];
-  stories: { id: string; personId: string; content: string; createdAt: string }[];
+  stops: {
+    id: string;
+    label: string;
+    placeId: string;
+    amount?: number;
+    orderedItems: { name: string; price?: number; quantity: number }[];
+    attendeeIds: string[];
+  }[];
+  stories: { id: string; personId: string; content: string; createdAt: string; stopId?: string }[];
 }
 
 function draftStopsFromInitial(stops: EditableMeetingDraft["stops"]): StopDraft[] {
   return stops.map((s) => ({
-    ...makeStopDraft(s.label),
+    ...makeStopDraft(s.label, s.attendeeIds),
+    tempId: s.id, // 기존 차수의 실제 id를 그대로 써서, 저장할 때 이야기와의 연결(stopId)이 유지되게 한다.
     placeId: s.placeId,
     amount: s.amount != null ? String(s.amount) : "",
     // 기존 주문 내역은 '메뉴에 없는 항목' 자유 입력 칸으로 옮겨서, 그 자리에서 이름/가격/수량을 그대로 고치거나 지울 수 있게 한다.
@@ -126,12 +136,21 @@ export default function MeetingForm({
   );
   const [activeStopIdx, setActiveStopIdx] = useState(0);
 
-  const [attendeeIds, setAttendeeIds] = useState<string[]>(initialDraft?.attendeeIds ?? []);
   const [attendeePick, setAttendeePick] = useState("");
   const [newPersonName, setNewPersonName] = useState("");
 
+  // 이야기는 "어느 차수 + 누구"로 묶인다 (stopId). 기존 데이터 중 차수 구분이 없던 이야기는
+  // 첫 번째 차수에 임시로 붙여서 보여준다(initialDraft를 만드는 쪽에서 이미 채워서 넘겨준다).
   const [stories, setStories] = useState<StoryDraft[]>(
-    () => initialDraft?.stories.map((s) => ({ tempId: crypto.randomUUID(), id: s.id, personId: s.personId, content: s.content, createdAt: s.createdAt })) ?? []
+    () =>
+      initialDraft?.stories.map((s) => ({
+        tempId: crypto.randomUUID(),
+        id: s.id,
+        personId: s.personId,
+        content: s.content,
+        createdAt: s.createdAt,
+        stopId: s.stopId ?? initialDraft.stops[0]?.id ?? "",
+      })) ?? []
   );
   const [newCategoryLabel, setNewCategoryLabel] = useState("");
   const [saving, setSaving] = useState(false);
@@ -154,7 +173,9 @@ export default function MeetingForm({
 
   function addStop() {
     setStops((prev) => {
-      const next = [...prev, makeStopDraft(`${prev.length + 1}차`)];
+      // 새 차수는 지금 보고 있던 차수의 참석자를 기본으로 그대로 데려온다. 여기서 빠진 사람만 체크 해제하면 된다.
+      const carryOver = prev[activeStopIdx]?.attendeeIds ?? [];
+      const next = [...prev, makeStopDraft(`${prev.length + 1}차`, [...carryOver])];
       setActiveStopIdx(next.length - 1);
       return next;
     });
@@ -232,17 +253,19 @@ export default function MeetingForm({
     await selectPlaceForStop(idx, created.id);
   }
 
+  // 참석자·이야기는 모두 "지금 보고 있는 차수"를 기준으로 추가/삭제된다.
   function addAttendeeFromPick() {
     if (!attendeePick) return;
+    const stop = stops[activeStopIdx];
     const [kind, id] = attendeePick.split(":");
     const idsToAdd: string[] = kind === "group" ? groups.find((g) => g.id === id)?.memberIds ?? [] : [id];
-    const newIds = idsToAdd.filter((pid) => !attendeeIds.includes(pid));
+    const newIds = idsToAdd.filter((pid) => !stop.attendeeIds.includes(pid));
     if (newIds.length === 0) {
       setAttendeePick("");
       return;
     }
-    setAttendeeIds((prev) => [...prev, ...newIds]);
-    setStories((prev) => [...prev, ...newIds.map((pid) => ({ tempId: crypto.randomUUID(), personId: pid, content: "" }))]);
+    updateStop(activeStopIdx, { attendeeIds: [...stop.attendeeIds, ...newIds] });
+    setStories((prev) => [...prev, ...newIds.map((pid) => ({ tempId: crypto.randomUUID(), personId: pid, content: "", stopId: stop.tempId }))]);
     setAttendeePick("");
   }
 
@@ -259,28 +282,33 @@ export default function MeetingForm({
         return;
       }
       const created: Person = await res.json();
+      const stop = stops[activeStopIdx];
       setPeople((prev) => [...prev, created]);
-      setAttendeeIds((prev) => [...prev, created.id]);
-      setStories((prev) => [...prev, { tempId: crypto.randomUUID(), personId: created.id, content: "" }]);
+      updateStop(activeStopIdx, { attendeeIds: [...stop.attendeeIds, created.id] });
+      setStories((prev) => [...prev, { tempId: crypto.randomUUID(), personId: created.id, content: "", stopId: stop.tempId }]);
       setNewPersonName("");
     } catch (err) {
       alert("참석자 추가 중 오류가 발생했습니다. 인터넷 연결을 확인해주세요.");
     }
   }
 
+  // 이 차수에서만 뺀다. 다른 차수에 같은 사람이 있으면 거기엔 그대로 남는다.
   function removeAttendee(id: string) {
-    setAttendeeIds((prev) => prev.filter((x) => x !== id));
-    setStories((prev) => prev.filter((s) => s.personId !== id));
+    const stop = stops[activeStopIdx];
+    updateStop(activeStopIdx, { attendeeIds: stop.attendeeIds.filter((x) => x !== id) });
+    setStories((prev) => prev.filter((s) => !(s.personId === id && s.stopId === stop.tempId)));
   }
 
   function removeGroup(group: Group) {
-    setAttendeeIds((prev) => prev.filter((x) => !group.memberIds.includes(x)));
-    setStories((prev) => prev.filter((s) => !group.memberIds.includes(s.personId)));
+    const stop = stops[activeStopIdx];
+    updateStop(activeStopIdx, { attendeeIds: stop.attendeeIds.filter((x) => !group.memberIds.includes(x)) });
+    setStories((prev) => prev.filter((s) => !(group.memberIds.includes(s.personId) && s.stopId === stop.tempId)));
   }
 
   function addStoryBlock() {
-    const defaultPerson = attendeeIds[0] ?? "";
-    setStories((prev) => [...prev, { tempId: crypto.randomUUID(), personId: defaultPerson, content: "" }]);
+    const stop = stops[activeStopIdx];
+    const defaultPerson = stop.attendeeIds[0] ?? "";
+    setStories((prev) => [...prev, { tempId: crypto.randomUUID(), personId: defaultPerson, content: "", stopId: stop.tempId }]);
   }
 
   function updateStory(tempId: string, patch: Partial<StoryDraft>) {
@@ -319,7 +347,8 @@ export default function MeetingForm({
       alert("모든 차수에 장소를 선택해주세요.");
       return;
     }
-    if (attendeeIds.length === 0) {
+    const overallAttendeeIds = Array.from(new Set(stops.flatMap((s) => s.attendeeIds)));
+    if (overallAttendeeIds.length === 0) {
       alert("참석자를 선택해주세요.");
       return;
     }
@@ -330,12 +359,15 @@ export default function MeetingForm({
       time,
       endDate: endDate || undefined,
       endTime: endTime || undefined,
-      attendeeIds,
+      // 모임 전체 참석자는 차수별 참석자를 합친 값이라, 여기서 직접 관리하지 않고 계산만 해서 보낸다.
+      attendeeIds: overallAttendeeIds,
       stops: stops.map((s) => ({
+        id: s.tempId,
         label: s.label,
         placeId: s.placeId,
         amount: s.amount ? Number(s.amount) : undefined,
         orderedItems: buildOrderedItemsForStop(s),
+        attendeeIds: s.attendeeIds,
       })),
       stories: stories
         .filter((s) => s.content.trim())
@@ -344,6 +376,7 @@ export default function MeetingForm({
           // id가 없으니 서버가 오늘 날짜로 새로 만든다.
           ...(s.id ? { id: s.id, createdAt: s.createdAt } : {}),
           personId: s.personId,
+          stopId: s.stopId,
           content: s.content.trim(),
           categoryIds: categoryIdsInContent(s.content),
         })),
@@ -361,9 +394,6 @@ export default function MeetingForm({
   const labels = personLabels(people);
   const nameOf = (id: string) => labels.get(id) ?? people.find((p) => p.id === id)?.name ?? "";
   const addressOf = (p: Place) => [p.city, p.gu, p.street].filter(Boolean).join(" ");
-  const presentGroups = derivePresentGroups(attendeeIds, groups);
-  const coveredByGroup = new Set(presentGroups.flatMap((g) => g.memberIds));
-  const soloAttendeeIds = attendeeIds.filter((id) => !coveredByGroup.has(id));
   const sortedGroups = groups.slice().sort((a, b) => a.name.localeCompare(b.name, "ko"));
   const sortedPeople = people.slice().sort((a, b) => a.name.localeCompare(b.name, "ko"));
 
@@ -371,6 +401,16 @@ export default function MeetingForm({
   const activeStopIndexInArray = activeStopIdx;
   const activePlace = places.find((p) => p.id === activeStop.placeId) ?? null;
   const activeTotal = computeStopTotal(activeStop);
+
+  // 참석자·이야기는 "지금 보고 있는 차수" 기준으로 보여준다.
+  const activeAttendeeIds = activeStop.attendeeIds;
+  const presentGroups = derivePresentGroups(activeAttendeeIds, groups);
+  const coveredByGroup = new Set(presentGroups.flatMap((g) => g.memberIds));
+  const soloAttendeeIds = activeAttendeeIds.filter((id) => !coveredByGroup.has(id));
+  const activeStories = stories.filter((s) => s.stopId === activeStop.tempId);
+
+  // 상단에 보여줄 "전체 참석자" = 모든 차수 참석자를 합친 값 (따로 관리하지 않고 자동으로 계산)
+  const overallAttendeeIds = Array.from(new Set(stops.flatMap((s) => s.attendeeIds)));
 
   return (
     <div className="bg-white border border-[#ddd8ca] rounded-2xl p-5 flex flex-col gap-5">
@@ -427,6 +467,11 @@ export default function MeetingForm({
       {/* 차수 탭 */}
       <div>
         <label className="text-xs text-[#7a7768] block mb-1">장소 (같은 모임에서 2차, 3차로 이어질 수 있어요)</label>
+        {overallAttendeeIds.length > 0 && (
+          <p className="text-xs text-[#a09c8c] mb-2">
+            전체 참석자 ({overallAttendeeIds.length}명, 차수별 참석자를 합친 값): {overallAttendeeIds.map((id) => nameOf(id)).join(", ")}
+          </p>
+        )}
         <div className="flex gap-1 mb-2 flex-wrap">
           {stops.map((s, idx) => (
             <button
@@ -592,153 +637,154 @@ export default function MeetingForm({
               className="w-full"
             />
           </div>
-        </div>
-      </div>
 
-      {/* 참석자 */}
-      <div>
-        <label className="text-xs text-[#7a7768] block mb-1">참석자</label>
-        <div className="flex flex-col gap-2 mb-2">
-          {presentGroups.map((g) => (
-            <div key={g.id} className="flex flex-wrap items-center gap-1 bg-[#e4dcc9] rounded-lg px-2 py-1.5">
-              <span className="text-xs font-medium text-[#5c5330] mr-1">{g.name} 그룹</span>
-              {g.memberIds.map((id) => (
-                <span key={id} className="flex items-center gap-1 bg-white text-[#5c5330] text-[11px] px-2 py-0.5 rounded-full">
-                  {nameOf(id)}
-                  <button type="button" onClick={() => removeAttendee(id)} aria-label={`${nameOf(id)} 개별 제거`} className="text-[#5c5330]">
-                    ×
+          {/* 이 차수 참석자 */}
+          <div className="mt-4 pt-4 border-t border-[#ddd8ca]">
+            <label className="text-xs text-[#7a7768] block mb-1">{activeStop.label} 참석자</label>
+            <div className="flex flex-col gap-2 mb-2">
+              {presentGroups.map((g) => (
+                <div key={g.id} className="flex flex-wrap items-center gap-1 bg-[#e4dcc9] rounded-lg px-2 py-1.5">
+                  <span className="text-xs font-medium text-[#5c5330] mr-1">{g.name} 그룹</span>
+                  {g.memberIds.map((id) => (
+                    <span key={id} className="flex items-center gap-1 bg-white text-[#5c5330] text-[11px] px-2 py-0.5 rounded-full">
+                      {nameOf(id)}
+                      <button type="button" onClick={() => removeAttendee(id)} aria-label={`${nameOf(id)} 개별 제거`} className="text-[#5c5330]">
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => removeGroup(g)}
+                    className="text-[11px] text-[#5c5330] underline bg-transparent p-0 ml-1"
+                  >
+                    그룹 전체 빼기
                   </button>
-                </span>
+                </div>
               ))}
-              <button
-                type="button"
-                onClick={() => removeGroup(g)}
-                className="text-[11px] text-[#5c5330] underline bg-transparent p-0 ml-1"
-              >
-                그룹 전체 빼기
+              {soloAttendeeIds.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {soloAttendeeIds.map((id) => (
+                    <span key={id} className="flex items-center gap-1 bg-[#f1e9e0] text-[#8a4a26] text-xs px-3 py-1 rounded-full">
+                      {nameOf(id)}
+                      <button type="button" onClick={() => removeAttendee(id)} aria-label={`${nameOf(id)} 제거`} className="text-[#8a4a26]">
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              {activeAttendeeIds.length === 0 && <p className="text-xs text-[#a09c8c]">아직 이 차수에 참석자가 없어요.</p>}
+            </div>
+            <div className="flex gap-2">
+              <select value={attendeePick} onChange={(e) => setAttendeePick(e.target.value)} className="flex-1">
+                <option value="">그룹 또는 참석자 선택...</option>
+                {groups.length > 0 && (
+                  <optgroup label="그룹 (전원 추가)">
+                    {sortedGroups.map((g) => (
+                      <option key={g.id} value={`group:${g.id}`}>
+                        {g.name} ({g.memberIds.length}명)
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                <optgroup label="참석자">
+                  {sortedPeople
+                    .filter((p) => !activeAttendeeIds.includes(p.id))
+                    .map((p) => (
+                      <option key={p.id} value={`person:${p.id}`}>
+                        {labels.get(p.id) ?? p.name}
+                      </option>
+                    ))}
+                </optgroup>
+              </select>
+              <button type="button" onClick={addAttendeeFromPick} className="px-3 py-2 border border-[#ddd8ca] bg-white text-sm">
+                추가
               </button>
             </div>
-          ))}
-          {soloAttendeeIds.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {soloAttendeeIds.map((id) => (
-                <span key={id} className="flex items-center gap-1 bg-[#f1e9e0] text-[#8a4a26] text-xs px-3 py-1 rounded-full">
-                  {nameOf(id)}
-                  <button type="button" onClick={() => removeAttendee(id)} aria-label={`${nameOf(id)} 제거`} className="text-[#8a4a26]">
-                    ×
-                  </button>
-                </span>
-              ))}
+            <div className="flex gap-2 mt-2">
+              <input placeholder="새 참석자 이름" value={newPersonName} onChange={(e) => setNewPersonName(e.target.value)} className="flex-1" />
+              <button type="button" onClick={addNewPerson} className="px-3 py-2 border border-[#ddd8ca] bg-white text-sm">
+                새 참석자 추가
+              </button>
+            </div>
+          </div>
+
+          {/* 이 차수에서 나눈 이야기 */}
+          {activeAttendeeIds.length > 0 && (
+            <div className="mt-4 pt-4 border-t border-[#ddd8ca]">
+              <p className="text-sm font-medium mb-2">{activeStop.label}에서 나눈 이야기</p>
+              <div className="flex flex-col gap-3">
+                {activeStories.map((s) => (
+                  <div key={s.tempId} className="bg-[#faf8f3] rounded-lg p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      {activeAttendeeIds.length > 1 ? (
+                        <>
+                          <label className="text-xs text-[#7a7768]">대상</label>
+                          <select value={s.personId} onChange={(e) => updateStory(s.tempId, { personId: e.target.value })} className="flex-1">
+                            {activeAttendeeIds.map((id) => (
+                              <option key={id} value={id}>
+                                {nameOf(id)}
+                              </option>
+                            ))}
+                          </select>
+                        </>
+                      ) : (
+                        <span className="text-xs text-[#a09c8c] flex-1">
+                          {s.createdAt ? `${s.createdAt.slice(0, 10)} 작성` : "오늘 작성"}
+                        </span>
+                      )}
+                      <button type="button" onClick={() => removeStory(s.tempId)} className="text-xs text-[#a34a3a]">
+                        삭제
+                      </button>
+                    </div>
+                    {activeAttendeeIds.length > 1 && s.createdAt && (
+                      <p className="text-xs text-[#a09c8c] mb-1">{s.createdAt.slice(0, 10)} 작성</p>
+                    )}
+                    <textarea
+                      placeholder="나눈 이야기를 적어주세요 (#카테고리 형태로 태그를 붙일 수 있어요)"
+                      value={s.content}
+                      onChange={(e) => updateStory(s.tempId, { content: e.target.value })}
+                      className="w-full min-h-[60px] text-sm"
+                    />
+                    <div className="flex flex-wrap gap-2 mt-2 items-center">
+                      <span className="text-xs text-[#7a7768] mr-1">카테고리 삽입</span>
+                      {categories.map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => insertTag(s.tempId, c.label)}
+                          className="bg-[#f1e9e0] text-[#8a4a26] text-xs px-2 py-1 rounded-full border-none"
+                        >
+                          #{c.label}
+                        </button>
+                      ))}
+                      <div className="flex items-center gap-1">
+                        <input
+                          placeholder="새 카테고리"
+                          value={newCategoryLabel}
+                          onChange={(e) => setNewCategoryLabel(e.target.value)}
+                          className="text-xs w-24 py-1"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => addCategory(s.tempId)}
+                          className="text-xs px-2 py-1 border border-dashed border-[#ddd8ca] bg-white"
+                        >
+                          + 추가
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <button type="button" onClick={addStoryBlock} className="mt-3 w-full text-sm py-2 border border-[#ddd8ca] bg-white">
+                + 이야기 추가
+              </button>
             </div>
           )}
         </div>
-        <div className="flex gap-2">
-          <select value={attendeePick} onChange={(e) => setAttendeePick(e.target.value)} className="flex-1">
-            <option value="">그룹 또는 참석자 선택...</option>
-            {groups.length > 0 && (
-              <optgroup label="그룹 (전원 추가)">
-                {sortedGroups.map((g) => (
-                  <option key={g.id} value={`group:${g.id}`}>
-                    {g.name} ({g.memberIds.length}명)
-                  </option>
-                ))}
-              </optgroup>
-            )}
-            <optgroup label="참석자">
-              {sortedPeople
-                .filter((p) => !attendeeIds.includes(p.id))
-                .map((p) => (
-                  <option key={p.id} value={`person:${p.id}`}>
-                    {labels.get(p.id) ?? p.name}
-                  </option>
-                ))}
-            </optgroup>
-          </select>
-          <button type="button" onClick={addAttendeeFromPick} className="px-3 py-2 border border-[#ddd8ca] bg-white text-sm">
-            추가
-          </button>
-        </div>
-        <div className="flex gap-2 mt-2">
-          <input placeholder="새 참석자 이름" value={newPersonName} onChange={(e) => setNewPersonName(e.target.value)} className="flex-1" />
-          <button type="button" onClick={addNewPerson} className="px-3 py-2 border border-[#ddd8ca] bg-white text-sm">
-            새 참석자 추가
-          </button>
-        </div>
       </div>
-
-      {/* 이야기 */}
-      {attendeeIds.length > 0 && (
-        <div className="border border-[#ddd8ca] rounded-lg p-3">
-          <p className="text-sm font-medium mb-2">참석자별 나눈 이야기</p>
-          <div className="flex flex-col gap-3">
-            {stories.map((s) => (
-              <div key={s.tempId} className="bg-[#faf8f3] rounded-lg p-3">
-                <div className="flex items-center gap-2 mb-2">
-                  {attendeeIds.length > 1 ? (
-                    <>
-                      <label className="text-xs text-[#7a7768]">대상</label>
-                      <select value={s.personId} onChange={(e) => updateStory(s.tempId, { personId: e.target.value })} className="flex-1">
-                        {attendeeIds.map((id) => (
-                          <option key={id} value={id}>
-                            {nameOf(id)}
-                          </option>
-                        ))}
-                      </select>
-                    </>
-                  ) : (
-                    <span className="text-xs text-[#a09c8c] flex-1">
-                      {s.createdAt ? `${s.createdAt.slice(0, 10)} 작성` : "오늘 작성"}
-                    </span>
-                  )}
-                  <button type="button" onClick={() => removeStory(s.tempId)} className="text-xs text-[#a34a3a]">
-                    삭제
-                  </button>
-                </div>
-                {attendeeIds.length > 1 && s.createdAt && (
-                  <p className="text-xs text-[#a09c8c] mb-1">{s.createdAt.slice(0, 10)} 작성</p>
-                )}
-                <textarea
-                  placeholder="나눈 이야기를 적어주세요 (#카테고리 형태로 태그를 붙일 수 있어요)"
-                  value={s.content}
-                  onChange={(e) => updateStory(s.tempId, { content: e.target.value })}
-                  className="w-full min-h-[60px] text-sm"
-                />
-                <div className="flex flex-wrap gap-2 mt-2 items-center">
-                  <span className="text-xs text-[#7a7768] mr-1">카테고리 삽입</span>
-                  {categories.map((c) => (
-                    <button
-                      key={c.id}
-                      type="button"
-                      onClick={() => insertTag(s.tempId, c.label)}
-                      className="bg-[#f1e9e0] text-[#8a4a26] text-xs px-2 py-1 rounded-full border-none"
-                    >
-                      #{c.label}
-                    </button>
-                  ))}
-                  <div className="flex items-center gap-1">
-                    <input
-                      placeholder="새 카테고리"
-                      value={newCategoryLabel}
-                      onChange={(e) => setNewCategoryLabel(e.target.value)}
-                      className="text-xs w-24 py-1"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => addCategory(s.tempId)}
-                      className="text-xs px-2 py-1 border border-dashed border-[#ddd8ca] bg-white"
-                    >
-                      + 추가
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-          <button type="button" onClick={addStoryBlock} className="mt-3 w-full text-sm py-2 border border-[#ddd8ca] bg-white">
-            + 이야기 추가
-          </button>
-        </div>
-      )}
 
       {stops.length > 1 && (
         <p className="text-sm text-[#7a7768]">

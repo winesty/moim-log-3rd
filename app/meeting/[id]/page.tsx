@@ -33,9 +33,18 @@ export default async function MeetingDetailPage({ params }: { params: { id: stri
   const stopsWithMenu = await Promise.all(
     meeting.stops.map(async (stop) => {
       const menus = await storage.listMenuSnapshots(stop.placeId);
-      return { stop, place: placesById.get(stop.placeId) ?? null, currentMenu: latestMenuSnapshot(menus, stop.placeId) };
+      const stopAttendeeIds = stop.attendeeIds ?? meeting.attendeeIds; // 차수 구분이 없던 예전 기록은 전체 참석자를 그대로 사용
+      return {
+        stop,
+        place: placesById.get(stop.placeId) ?? null,
+        currentMenu: latestMenuSnapshot(menus, stop.placeId),
+        stopAttendees: people.filter((p) => stopAttendeeIds.includes(p.id)),
+        stopStories: meeting.stories.filter((s) => s.stopId === stop.id),
+      };
     })
   );
+  // 차수 구분 없이 저장된 예전 이야기 (stopId가 없는 것들)
+  const unscopedStories = meeting.stories.filter((s) => !s.stopId);
 
   const totalAmount = meeting.stops.reduce((sum, s) => sum + (s.amount ?? 0), 0);
 
@@ -62,7 +71,7 @@ export default async function MeetingDetailPage({ params }: { params: { id: stri
       {totalAmount > 0 && <p className="text-sm text-[#a09c8c] mb-4">전체 금액: {totalAmount.toLocaleString()}원</p>}
 
       <div className="flex flex-col gap-4 mb-6">
-        {stopsWithMenu.map(({ stop, place, currentMenu }) => (
+        {stopsWithMenu.map(({ stop, place, currentMenu, stopAttendees, stopStories }) => (
           <div key={stop.id} className="bg-white border border-[#ddd8ca] rounded-xl p-4">
             <div className="flex items-center justify-between mb-1">
               <p className="font-medium text-sm">
@@ -70,6 +79,9 @@ export default async function MeetingDetailPage({ params }: { params: { id: stri
               </p>
               {meeting.stops.length > 1 && <DeleteStopButton meetingId={meeting.id} stopId={stop.id} label={stop.label} />}
             </div>
+            {stopAttendees.length > 0 && (
+              <p className="text-xs text-[#a09c8c] mb-1">참석: {stopAttendees.map((a) => labels.get(a.id) ?? a.name).join(", ")}</p>
+            )}
             {stop.orderedItems && stop.orderedItems.length > 0 && (
               <p className="text-xs text-[#a09c8c] mb-1">
                 주문: {stop.orderedItems.map((it) => `${it.name} x${it.quantity}${it.price ? `(${it.price.toLocaleString()}원)` : ""}`).join(", ")}
@@ -77,6 +89,27 @@ export default async function MeetingDetailPage({ params }: { params: { id: stri
             )}
             {stop.amount != null && <p className="text-xs text-[#a09c8c] mb-2">금액: {stop.amount.toLocaleString()}원</p>}
             <AddOrderedItemForm meetingId={meeting.id} stopId={stop.id} currentMenu={currentMenu} />
+
+            {stopStories.length > 0 && (
+              <div className="flex flex-col gap-2 mt-3">
+                {stopStories.map((s) => {
+                  const person = attendees.find((a) => a.id === s.personId);
+                  return (
+                    <div key={s.id} className="bg-[#faf8f3] rounded-lg p-3">
+                      <p className="text-[11px] text-[#a09c8c] mb-1">
+                        {person ? labels.get(person.id) ?? person.name : ""} · {s.createdAt.slice(0, 10)} 작성
+                      </p>
+                      <p className="text-sm whitespace-pre-wrap">{s.content}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {stopAttendees.length > 0 && (
+              <div className="mt-3">
+                <AddStoryForm meetingId={meeting.id} stopId={stop.id} attendees={stopAttendees} categories={categories} />
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -85,21 +118,24 @@ export default async function MeetingDetailPage({ params }: { params: { id: stri
         <AddStopForm meetingId={meeting.id} places={places} nextLabel={`${meeting.stops.length + 1}차`} />
       </div>
 
-      <div className="flex flex-col gap-2 mb-2">
-        {meeting.stories.map((s) => {
-          const person = attendees.find((a) => a.id === s.personId);
-          return (
-            <div key={s.id} className="bg-white border border-[#ddd8ca] rounded-lg p-3">
-              <p className="text-[11px] text-[#a09c8c] mb-1">
-                {person ? labels.get(person.id) ?? person.name : ""} · {s.createdAt.slice(0, 10)} 작성
-              </p>
-              <p className="text-sm whitespace-pre-wrap">{s.content}</p>
-            </div>
-          );
-        })}
-      </div>
-
-      <AddStoryForm meetingId={meeting.id} attendees={attendees} categories={categories} />
+      {unscopedStories.length > 0 && (
+        <div className="mb-6">
+          <p className="text-xs text-[#a09c8c] mb-2">차수 구분 없이 기록된 이야기 (편집 화면에서 차수를 지정할 수 있어요)</p>
+          <div className="flex flex-col gap-2">
+            {unscopedStories.map((s) => {
+              const person = attendees.find((a) => a.id === s.personId);
+              return (
+                <div key={s.id} className="bg-white border border-[#ddd8ca] rounded-lg p-3">
+                  <p className="text-[11px] text-[#a09c8c] mb-1">
+                    {person ? labels.get(person.id) ?? person.name : ""} · {s.createdAt.slice(0, 10)} 작성
+                  </p>
+                  <p className="text-sm whitespace-pre-wrap">{s.content}</p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

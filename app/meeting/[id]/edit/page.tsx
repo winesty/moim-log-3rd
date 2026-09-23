@@ -21,14 +21,24 @@ export default async function EditMeetingPage({ params }: { params: { id: string
     time: meeting.time || "19:00",
     endDate: meeting.endDate,
     endTime: meeting.endTime,
-    attendeeIds: meeting.attendeeIds,
     stops: meeting.stops.map((s) => ({
+      id: s.id,
       label: s.label,
       placeId: s.placeId,
       amount: s.amount,
       orderedItems: s.orderedItems ?? [],
+      // 차수 구분이 생기기 전 기록은 attendeeIds가 없으니, 그때는 모임 전체 참석자를 그대로 넣어둔다.
+      // (실제로 차수마다 인원이 달랐던 옛 모임은 편집 화면에서 차수별로 체크를 빼주셔야 정확해져요.)
+      attendeeIds: s.attendeeIds ?? meeting.attendeeIds,
     })),
-    stories: meeting.stories.map((s) => ({ id: s.id, personId: s.personId, content: s.content, createdAt: s.createdAt })),
+    stories: meeting.stories.map((s) => ({
+      id: s.id,
+      personId: s.personId,
+      content: s.content,
+      createdAt: s.createdAt,
+      // 차수 구분이 없던 이야기는 첫 번째 차수에 임시로 붙여서 보여준다.
+      stopId: s.stopId,
+    })),
   };
 
   return (

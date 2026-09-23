@@ -27,21 +27,25 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     content: s.content,
     categoryIds: s.categoryIds ?? [],
     createdAt: now,
+    stopId: s.stopId || undefined,
   }));
 
   let stops = existing.stops;
 
-  // 새 차수(2차/3차 등) 추가
+  // 새 차수(2차/3차 등) 추가. 참석자를 따로 지정하지 않으면 직전 차수 인원을 그대로 데려온다
+  // (차수마다 참석자가 달라질 수 있다는 걸 알기 전까지는 보통 같은 사람들이 이어서 가니까).
   if (body.newStop) {
     const newOrderedItems: OrderedItem[] = (body.newStop.orderedItems ?? []).filter(
       (it: OrderedItem) => it.name?.trim() && it.quantity > 0
     );
+    const previousStop = stops[stops.length - 1];
     const newStop: Stop = {
       id: nanoid(),
       label: body.newStop.label?.trim() || `${stops.length + 1}차`,
       placeId: body.newStop.placeId,
       amount: body.newStop.amount,
       orderedItems: newOrderedItems,
+      attendeeIds: body.newStop.attendeeIds ?? previousStop?.attendeeIds ?? existing.attendeeIds,
     };
     stops = [...stops, newStop];
     if (newOrderedItems.length > 0) {

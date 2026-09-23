@@ -80,6 +80,8 @@ export interface StoryEntry {
   content: string;
   categoryIds: ID[];
   createdAt: string;
+  /** 어느 차수에서 나온 이야기인지. 차수 구분이 생기기 전 기록에는 없을 수 있음. */
+  stopId?: ID;
 }
 
 export interface OrderedItem {
@@ -98,6 +100,9 @@ export interface Stop {
   placeId: ID;
   amount?: number;
   orderedItems?: OrderedItem[];
+  /** 이 차수에 있었던 사람들. 차수마다 인원이 달라질 수 있어 모임 전체 참석자와 별개로 둔다.
+   *  차수 구분이 생기기 전 기록에는 없을 수 있음(그 경우 모임 전체 참석자와 같다고 본다). */
+  attendeeIds?: ID[];
 }
 
 export interface Meeting {

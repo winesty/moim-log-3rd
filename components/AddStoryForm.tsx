@@ -7,10 +7,13 @@ import { personLabels } from "@/lib/personDisplay";
 
 export default function AddStoryForm({
   meetingId,
+  stopId,
   attendees,
   categories,
 }: {
   meetingId: string;
+  /** 어느 차수에서 나온 이야기인지. 넘기지 않으면 차수 구분 없이 모임 전체에 붙는다(예전 방식과 동일). */
+  stopId?: string;
   attendees: Person[];
   categories: StoryCategory[];
 }) {
@@ -30,7 +33,7 @@ export default function AddStoryForm({
     await fetch(`/api/meetings/${meetingId}`, {
       method: "PUT",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ newStories: [{ personId, content: content.trim() }] }),
+      body: JSON.stringify({ newStories: [{ personId, content: content.trim(), stopId }] }),
     });
     setSaving(false);
     setContent("");
