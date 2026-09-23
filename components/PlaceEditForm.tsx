@@ -17,6 +17,7 @@ export default function PlaceEditForm({ place }: { place: Place }) {
   const [city, setCity] = useState(place.city ?? "");
   const [gu, setGu] = useState(place.gu ?? "");
   const [street, setStreet] = useState(place.street ?? "");
+  const [detail, setDetail] = useState(place.detail ?? "");
   const [zonecode, setZonecode] = useState(place.zonecode ?? "");
   const [tel, setTel] = useState(place.tel ?? "");
   const [category, setCategory] = useState(place.category ?? "");
@@ -53,7 +54,7 @@ export default function PlaceEditForm({ place }: { place: Place }) {
     await fetch("/api/places", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ id: place.id, name, city, gu, street, zonecode, tel, category }),
+      body: JSON.stringify({ id: place.id, name, city, gu, street, detail, zonecode, tel, category }),
     });
     setSaving(false);
     setEditing(false);
@@ -82,6 +83,7 @@ export default function PlaceEditForm({ place }: { place: Place }) {
           주소 검색
         </button>
       </div>
+      <input placeholder="상세주소 (예: 1층, 지하1층, 2동 301호)" value={detail} onChange={(e) => setDetail(e.target.value)} className="w-full mb-2" />
 
       <div className="grid grid-cols-2 gap-2 mb-3">
         <div>

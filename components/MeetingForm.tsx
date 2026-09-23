@@ -270,19 +270,40 @@ export default function MeetingForm({
   }
 
   async function addNewPerson() {
-    if (!newPersonName.trim()) return;
+    const trimmed = newPersonName.trim();
+    if (!trimmed) return;
+    const stop = stops[activeStopIdx];
+
+    // 이미 같은 이름의 사람이 있으면 실수로 중복 등록하는 걸 막기 위해 한 번 확인한다.
+    // 동명이인 자체는 지원하니(최초 만난 일자로 구분), 그래도 새로 만들겠다면 막지는 않는다.
+    const duplicates = people.filter((p) => p.name.trim().toLowerCase() === trimmed.toLowerCase());
+    if (duplicates.length > 0) {
+      const existingLabel = duplicates.map((p) => labels.get(p.id) ?? p.name).join(", ");
+      const useExisting = confirm(
+        `"${trimmed}" 이름의 참석자가 이미 있어요 (${existingLabel}).\n\n확인 → 기존 참석자로 추가할게요\n취소 → 그래도 새로 만들게요`
+      );
+      if (useExisting) {
+        const pickId = duplicates[0].id;
+        if (!stop.attendeeIds.includes(pickId)) {
+          updateStop(activeStopIdx, { attendeeIds: [...stop.attendeeIds, pickId] });
+          setStories((prev) => [...prev, { tempId: crypto.randomUUID(), personId: pickId, content: "", stopId: stop.tempId }]);
+        }
+        setNewPersonName("");
+        return;
+      }
+    }
+
     try {
       const res = await fetch("/api/people", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name: newPersonName.trim() }),
+        body: JSON.stringify({ name: trimmed }),
       });
       if (!res.ok) {
         alert("참석자 추가에 실패했습니다. 잠시 후 다시 시도해주세요.");
         return;
       }
       const created: Person = await res.json();
-      const stop = stops[activeStopIdx];
       setPeople((prev) => [...prev, created]);
       updateStop(activeStopIdx, { attendeeIds: [...stop.attendeeIds, created.id] });
       setStories((prev) => [...prev, { tempId: crypto.randomUUID(), personId: created.id, content: "", stopId: stop.tempId }]);
@@ -393,7 +414,7 @@ export default function MeetingForm({
 
   const labels = personLabels(people);
   const nameOf = (id: string) => labels.get(id) ?? people.find((p) => p.id === id)?.name ?? "";
-  const addressOf = (p: Place) => [p.city, p.gu, p.street].filter(Boolean).join(" ");
+  const addressOf = (p: Place) => [p.city, p.gu, p.street, p.detail].filter(Boolean).join(" ");
   const sortedGroups = groups.slice().sort((a, b) => a.name.localeCompare(b.name, "ko"));
   const sortedPeople = people.slice().sort((a, b) => a.name.localeCompare(b.name, "ko"));
 
@@ -793,14 +814,12 @@ export default function MeetingForm({
       )}
 
       <div className="flex gap-2">
-        {mode === "edit" && (
-          <Link
-            href={`/meeting/${meetingId}`}
-            className="flex-1 py-3 border border-[#ddd8ca] bg-white text-sm text-center no-underline text-[#2b2a26]"
-          >
-            취소
-          </Link>
-        )}
+        <Link
+          href={mode === "edit" ? `/meeting/${meetingId}` : "/meetings"}
+          className="flex-1 py-3 border border-[#ddd8ca] bg-white text-sm text-center no-underline text-[#2b2a26]"
+        >
+          취소
+        </Link>
         <button
           type="button"
           onClick={handleSubmit}

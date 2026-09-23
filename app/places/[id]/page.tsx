@@ -24,7 +24,7 @@ export default async function PlaceDetailPage({ params }: { params: { id: string
     <div>
       <Script src="https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js" strategy="afterInteractive" />
       <h1 className="text-xl font-medium mb-1">{place.name}</h1>
-      <p className="text-sm text-[#7a7768] mb-1">{[place.city, place.gu, place.street].filter(Boolean).join(" ") || "주소 미등록"}</p>
+      <p className="text-sm text-[#7a7768] mb-1">{[place.city, place.gu, place.street, place.detail].filter(Boolean).join(" ") || "주소 미등록"}</p>
       <p className="text-sm text-[#7a7768] mb-2">
         {place.tel || "전화번호 미등록"} {place.category ? `· ${place.category}` : ""}
       </p>

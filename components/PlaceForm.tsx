@@ -20,6 +20,7 @@ export default function PlaceForm() {
   const [city, setCity] = useState("");
   const [gu, setGu] = useState("");
   const [street, setStreet] = useState("");
+  const [detail, setDetail] = useState("");
   const [zonecode, setZonecode] = useState("");
   const [tel, setTel] = useState("");
   const [category, setCategory] = useState("");
@@ -81,7 +82,7 @@ export default function PlaceForm() {
     const placeRes = await fetch("/api/places", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name, city, gu, street, zonecode, tel, category }),
+      body: JSON.stringify({ name, city, gu, street, detail, zonecode, tel, category }),
     });
     const place = await placeRes.json();
 
@@ -117,6 +118,7 @@ export default function PlaceForm() {
           </button>
         </div>
         {zonecode && <p className="text-xs text-[#a09c8c] mt-1">우편번호 {zonecode}</p>}
+        <input placeholder="상세주소 (예: 1층, 지하1층, 2동 301호)" value={detail} onChange={(e) => setDetail(e.target.value)} className="w-full mt-2" />
       </div>
 
       <div className="grid grid-cols-2 gap-3">

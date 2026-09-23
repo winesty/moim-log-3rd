@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getStorage } from "@/lib/storage";
 import DeletePersonButton from "@/components/DeletePersonButton";
+import PersonEditForm from "@/components/PersonEditForm";
 import { personLabels, formatAge } from "@/lib/personDisplay";
 
 export const dynamic = "force-dynamic";
@@ -48,6 +49,9 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
         </p>
       )}
       {!lastMeetingDate && <p className="text-sm text-[#7a7768] mb-2">아직 함께한 모임이 없습니다.</p>}
+      <div className="mb-2">
+        <PersonEditForm person={person} />
+      </div>
 
       {memberOfGroups.length > 0 && (
         <p className="text-xs text-[#7a7768] mb-6">

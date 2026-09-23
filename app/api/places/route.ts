@@ -43,6 +43,7 @@ export async function POST(req: NextRequest) {
     city: body.city,
     gu: body.gu,
     street: body.street,
+    detail: body.detail,
     zonecode: body.zonecode,
     tel: body.tel,
     category: body.category,

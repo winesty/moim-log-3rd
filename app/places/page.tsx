@@ -68,7 +68,7 @@ export default function PlacesPage() {
                 )}
               </div>
               <p className="text-sm text-[#7a7768]">
-                {[p.city, p.gu, p.street].filter(Boolean).join(" ") || "주소 미등록"}
+                {[p.city, p.gu, p.street, p.detail].filter(Boolean).join(" ") || "주소 미등록"}
                 {p.category ? ` · ${p.category}` : ""}
               </p>
               <p className="text-xs text-[#a09c8c]">

@@ -43,6 +43,7 @@ export interface Place {
   city?: string; // 시/도
   gu?: string; // 시/군/구
   street?: string; // 도로명 + 건물번지
+  detail?: string; // 상세주소 (예: 1층, 지하1층, 2동 301호) - 주소 검색 결과에는 안 들어있어 따로 입력
   zonecode?: string; // 우편번호
   tel?: string;
   category?: string;
