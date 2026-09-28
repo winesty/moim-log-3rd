@@ -14,7 +14,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="ko">
       <body>
         <div className="max-w-2xl mx-auto px-4">
-          <header className="flex items-center justify-between py-5 border-b border-[#ddd8ca]">
+          <header className="flex items-center justify-between gap-3 py-5 border-b border-[#ddd8ca]">
             <Link href="/" className="text-lg font-medium text-[#2b2a26] no-underline">
               모임 기록
             </Link>

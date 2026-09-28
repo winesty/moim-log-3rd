@@ -9,6 +9,7 @@ const links = [
   { href: "/places", label: "장소" },
   { href: "/people", label: "사람" },
   { href: "/categories", label: "카테고리" },
+  { href: "/settings", label: "설정" },
 ];
 
 // "모임" 메뉴는 목록 페이지(/meetings)뿐 아니라 모임 상세 페이지(/meeting/[id], 단수)에
@@ -23,7 +24,7 @@ function isActive(pathname: string, href: string): boolean {
 export default function NavLinks() {
   const pathname = usePathname();
   return (
-    <nav className="flex gap-4 text-sm">
+    <nav className="flex flex-wrap justify-end gap-x-3 gap-y-1 sm:gap-x-4 text-sm">
       {links.map((link) => {
         const active = isActive(pathname, link.href);
         return (

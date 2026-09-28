@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHash } from "crypto";
-import { AUTH_COOKIE_NAME, authCookieOptions } from "@/lib/authConfig";
+import { AUTH_COOKIE_NAME, IDLE_COOKIE_NAME, authCookieOptions, resolveIdleMinutes } from "@/lib/authConfig";
 
 export async function POST(req: NextRequest) {
   const { password } = await req.json().catch(() => ({ password: "" }));
@@ -15,7 +15,9 @@ export async function POST(req: NextRequest) {
 
   const token = createHash("sha256").update(expected).digest("hex");
   const res = NextResponse.json({ ok: true });
-  res.cookies.set(AUTH_COOKIE_NAME, token, authCookieOptions());
+  // 이 기기에서 이미 고른 로그아웃 시간이 있으면 그걸 따르고, 없으면 기본값을 쓴다.
+  const idleMinutes = resolveIdleMinutes(req.cookies.get(IDLE_COOKIE_NAME)?.value);
+  res.cookies.set(AUTH_COOKIE_NAME, token, authCookieOptions(idleMinutes));
   return res;
 }
 
