@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { IDLE_OPTIONS_MINUTES, formatIdleMinutes } from "@/lib/authConfig";
 
 export default function SettingsPanel({ currentMinutes, defaultMinutes }: { currentMinutes: number; defaultMinutes: number }) {
@@ -56,6 +57,14 @@ export default function SettingsPanel({ currentMinutes, defaultMinutes }: { curr
           이 기기(브라우저)에만 적용돼요. 휴대폰과 컴퓨터를 다르게 정할 수 있고, 브라우저 데이터를 지우면 기본값({formatIdleMinutes(defaultMinutes)})으로
           돌아가요.
         </p>
+      </section>
+
+      <section className="bg-white border border-[#ddd8ca] rounded-2xl p-5">
+        <h2 className="text-sm font-medium mb-1">데이터 정리</h2>
+        <p className="text-xs text-[#7a7768] mb-3">이름이 같은 사람이나 겹치는 장소를 찾아 합칠 수 있어요.</p>
+        <Link href="/settings/duplicates" className="block w-full py-3 border border-[#ddd8ca] bg-white text-sm text-center no-underline text-[#2b2a26]">
+          중복 후보 찾기
+        </Link>
       </section>
 
       <section className="bg-white border border-[#ddd8ca] rounded-2xl p-5">

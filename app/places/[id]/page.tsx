@@ -5,10 +5,17 @@ import { getStorage } from "@/lib/storage";
 import { latestMenuSnapshot, pastMenuSnapshots } from "@/lib/storage/searchHelper";
 import AddMenuSnapshotForm from "@/components/AddMenuSnapshotForm";
 import PlaceEditForm from "@/components/PlaceEditForm";
+import PlaceMergePanel from "@/components/PlaceMergePanel";
 
 export const dynamic = "force-dynamic";
 
-export default async function PlaceDetailPage({ params }: { params: { id: string } }) {
+export default async function PlaceDetailPage({
+  params,
+  searchParams,
+}: {
+  params: { id: string };
+  searchParams: { merge?: string };
+}) {
   const storage = await getStorage();
   const place = await storage.getPlace(params.id);
   if (!place) notFound();
@@ -28,8 +35,9 @@ export default async function PlaceDetailPage({ params }: { params: { id: string
       <p className="text-sm text-[#7a7768] mb-2">
         {place.tel || "전화번호 미등록"} {place.category ? `· ${place.category}` : ""}
       </p>
-      <div className="mb-6">
+      <div className="mb-6 flex flex-col gap-2">
         <PlaceEditForm place={place} />
+        <PlaceMergePanel place={place} initialTargetId={searchParams.merge} />
       </div>
 
       <div className="bg-white border border-[#ddd8ca] rounded-xl p-4 mb-4">

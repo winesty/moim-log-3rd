@@ -23,7 +23,15 @@ export default function PlacesPage() {
   }, []);
 
   async function remove(p: PlaceWithStats) {
-    if (!confirm(`"${p.name}"을(를) 삭제할까요? 이 장소의 메뉴 이력도 함께 사라집니다. (이 장소가 연결된 모임 기록은 남아있지만 장소 정보가 비어보일 수 있어요)`)) return;
+    const res = await fetch(`/api/places/${p.id}`);
+    const data = await res.json();
+    const meetingCount = data.meetings?.length ?? 0;
+    const menuCount = (data.currentMenu ? 1 : 0) + (data.pastMenus?.length ?? 0);
+    const detail =
+      meetingCount > 0 || menuCount > 0
+        ? `모임 ${meetingCount}건, 메뉴 이력 ${menuCount}건과 연결돼 있어요. 삭제하면 메뉴 이력은 함께 사라지고, 모임 기록은 남지만 장소 정보가 비어보일 수 있어요.`
+        : "연결된 모임이나 메뉴 이력은 없어요.";
+    if (!confirm(`"${p.name}"을(를) 삭제할까요?\n\n${detail}`)) return;
     await fetch(`/api/places/${p.id}`, { method: "DELETE" });
     load(q);
   }

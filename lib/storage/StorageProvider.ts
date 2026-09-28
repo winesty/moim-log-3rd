@@ -56,10 +56,28 @@ export interface StorageProvider {
   // --- 검색 ---
   search(query: SearchQuery): Promise<MeetingSearchResult[]>;
 
+  // --- 합치기 (동명이인·중복 장소를 하나로) ---
+  /** keepId는 남기고 removeId는 없앤다. overrides로 넘긴 칸은 그 값을 쓰고, 나머지는 keep이 비어있을 때만 remove 값으로 채운다. */
+  mergePeople(keepId: string, removeId: string, overrides?: Partial<Person>): Promise<MergePeopleResult>;
+  mergePlaces(keepId: string, removeId: string, overrides?: Partial<Place>): Promise<MergePlacesResult>;
+
   // --- 시트 가져오기 (한 번에 읽고 한 번에 쓰기) ---
   bulkImport(data: BulkImportData): Promise<BulkImportResult>;
   listImportBatches(): Promise<ImportBatchSummary[]>;
   removeImportBatch(batchId: string, force?: boolean): Promise<RemoveImportBatchResult>;
+}
+
+export interface MergePeopleResult {
+  person: Person;
+  affectedMeetings: number;
+  affectedStories: number;
+  affectedGroups: number;
+}
+
+export interface MergePlacesResult {
+  place: Place;
+  affectedMeetings: number;
+  affectedMenus: number;
 }
 
 export interface BulkImportData {

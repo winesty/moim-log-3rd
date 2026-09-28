@@ -1,4 +1,12 @@
-import { StorageProvider, BulkImportData, BulkImportResult, ImportBatchSummary, RemoveImportBatchResult } from "./StorageProvider";
+import {
+  StorageProvider,
+  BulkImportData,
+  BulkImportResult,
+  ImportBatchSummary,
+  RemoveImportBatchResult,
+  MergePeopleResult,
+  MergePlacesResult,
+} from "./StorageProvider";
 import {
   Meeting,
   Person,
@@ -229,6 +237,134 @@ export abstract class JsonBackedProvider implements StorageProvider {
       this.listGroups(),
     ]);
     return searchMeetingsInMemory(meetings, people, places, menus, groups, query);
+  }
+
+  // --- 합치기 ---
+  async mergePeople(keepId: string, removeId: string, overrides: Partial<Person> = {}): Promise<MergePeopleResult> {
+    if (keepId === removeId) throw new Error("같은 사람은 합칠 수 없습니다.");
+    const [people, meetings, groups] = await Promise.all([this.listPeople(), this.listMeetings(), this.listGroups()]);
+    const keep = people.find((p) => p.id === keepId);
+    const remove = people.find((p) => p.id === removeId);
+    if (!keep || !remove) throw new Error("합칠 사람을 찾을 수 없습니다.");
+
+    const FIELDS: (keyof Person)[] = [
+      "name",
+      "age",
+      "birthDate",
+      "education",
+      "family",
+      "career",
+      "companyTitle",
+      "network",
+      "hobby",
+      "etc",
+    ];
+    const merged: Person = { ...keep };
+    for (const f of FIELDS) {
+      const override = (overrides as any)[f];
+      if (override !== undefined) (merged as any)[f] = override;
+      else if (!merged[f] && remove[f]) (merged as any)[f] = remove[f];
+    }
+    // 최초 만난 일자는 더 이른 쪽을 진짜 최초로 본다.
+    if (remove.firstMetDate && (!merged.firstMetDate || remove.firstMetDate < merged.firstMetDate)) {
+      merged.firstMetDate = remove.firstMetDate;
+    }
+    merged.updatedAt = new Date().toISOString();
+
+    let affectedMeetings = 0;
+    let affectedStories = 0;
+    const newMeetings = meetings.map((m) => {
+      let changed = false;
+      const attendeeIds = m.attendeeIds.includes(removeId)
+        ? Array.from(new Set(m.attendeeIds.map((id) => (id === removeId ? keepId : id))))
+        : m.attendeeIds;
+      if (attendeeIds !== m.attendeeIds) changed = true;
+      const stops = m.stops.map((s) => {
+        if (!s.attendeeIds?.includes(removeId)) return s;
+        changed = true;
+        return { ...s, attendeeIds: Array.from(new Set(s.attendeeIds!.map((id) => (id === removeId ? keepId : id)))) };
+      });
+      const stories = m.stories.map((s) => {
+        if (s.personId !== removeId) return s;
+        changed = true;
+        affectedStories++;
+        return { ...s, personId: keepId };
+      });
+      if (changed) affectedMeetings++;
+      return changed ? { ...m, attendeeIds, stops, stories } : m;
+    });
+
+    let affectedGroups = 0;
+    const newGroups = groups.map((g) => {
+      if (!g.memberIds.includes(removeId)) return g;
+      affectedGroups++;
+      return {
+        ...g,
+        memberIds: Array.from(new Set(g.memberIds.map((id) => (id === removeId ? keepId : id)))),
+        updatedAt: new Date().toISOString(),
+      };
+    });
+
+    const newPeople = people.filter((p) => p.id !== removeId).map((p) => (p.id === keepId ? merged : p));
+
+    await Promise.all([
+      this.writeFile(FILES.meetings, newMeetings),
+      this.writeFile(FILES.groups, newGroups),
+      this.writeFile(FILES.people, newPeople),
+    ]);
+
+    return { person: merged, affectedMeetings, affectedStories, affectedGroups };
+  }
+
+  async mergePlaces(keepId: string, removeId: string, overrides: Partial<Place> = {}): Promise<MergePlacesResult> {
+    if (keepId === removeId) throw new Error("같은 장소는 합칠 수 없습니다.");
+    const [places, meetings, menus] = await Promise.all([this.listPlaces(), this.listMeetings(), this.listMenuSnapshotsAll()]);
+    const keep = places.find((p) => p.id === keepId);
+    const remove = places.find((p) => p.id === removeId);
+    if (!keep || !remove) throw new Error("합칠 장소를 찾을 수 없습니다.");
+
+    const FIELDS: (keyof Place)[] = ["name", "city", "gu", "street", "detail", "zonecode", "tel", "category", "note"];
+    const merged: Place = { ...keep };
+    for (const f of FIELDS) {
+      const override = (overrides as any)[f];
+      if (override !== undefined) (merged as any)[f] = override;
+      else if (!merged[f] && remove[f]) (merged as any)[f] = remove[f];
+    }
+    // 운영상태는 더 최근에 확인된 쪽을 따른다.
+    if (remove.lastCheckedAt && (!merged.lastCheckedAt || remove.lastCheckedAt > merged.lastCheckedAt)) {
+      merged.lastCheckedAt = remove.lastCheckedAt;
+      merged.operatingStatus = remove.operatingStatus;
+    }
+    merged.updatedAt = new Date().toISOString();
+
+    let affectedMeetings = 0;
+    const newMeetings = meetings.map((m) => {
+      let changed = false;
+      const stops = m.stops.map((s) => {
+        if (s.placeId !== removeId) return s;
+        changed = true;
+        return { ...s, placeId: keepId };
+      });
+      if (changed) affectedMeetings++;
+      return changed ? { ...m, stops } : m;
+    });
+
+    let affectedMenus = 0;
+    const newMenus = menus.map((s) => {
+      if (s.placeId !== removeId) return s;
+      affectedMenus++;
+      return { ...s, placeId: keepId };
+    });
+
+    const newPlaces = places.filter((p) => p.id !== removeId).map((p) => (p.id === keepId ? merged : p));
+
+    await Promise.all([
+      this.writeFile(FILES.meetings, newMeetings),
+      this.writeFile(FILES.menuSnapshots, newMenus),
+      this.writeFile(FILES.places, newPlaces),
+    ]);
+
+    return { place: merged, affectedMeetings, affectedMenus };
   }
 
   // --- 시트 가져오기 ---

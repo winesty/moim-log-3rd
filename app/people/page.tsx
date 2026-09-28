@@ -39,7 +39,19 @@ export default function PeoplePage() {
   });
 
   async function remove(p: PersonWithStats) {
-    if (!confirm(`"${p.name}"을(를) 삭제할까요? 이미 기록된 모임/이야기는 남아있지만 이름 연결이 사라집니다.`)) return;
+    // 삭제 전에 실제로 영향받는 모임·이야기 수를 보여준다.
+    const res = await fetch(`/api/people/${p.id}`);
+    const data = await res.json();
+    const meetingCount = data.meetings?.length ?? 0;
+    const storyCount = (data.meetings ?? []).reduce(
+      (sum: number, m: any) => sum + (m.stories?.filter((s: any) => s.personId === p.id).length ?? 0),
+      0
+    );
+    const detail =
+      meetingCount > 0
+        ? `모임 ${meetingCount}건, 이야기 ${storyCount}건에 연결돼 있어요. 삭제해도 그 기록은 남지만, 이름 연결이 사라져서 "누구였는지" 알 수 없게 돼요.`
+        : "연결된 모임이나 이야기는 없어요.";
+    if (!confirm(`"${p.name}"을(를) 삭제할까요?\n\n${detail}`)) return;
     await fetch(`/api/people/${p.id}`, { method: "DELETE" });
     load(q);
   }

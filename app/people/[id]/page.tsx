@@ -3,6 +3,7 @@ import Link from "next/link";
 import { getStorage } from "@/lib/storage";
 import DeletePersonButton from "@/components/DeletePersonButton";
 import PersonEditForm from "@/components/PersonEditForm";
+import PersonMergePanel from "@/components/PersonMergePanel";
 import { personLabels, formatAge } from "@/lib/personDisplay";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +14,13 @@ function daysBetween(fromDateStr: string, toDate: Date): number {
   return Math.round((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24));
 }
 
-export default async function PersonDetailPage({ params }: { params: { id: string } }) {
+export default async function PersonDetailPage({
+  params,
+  searchParams,
+}: {
+  params: { id: string };
+  searchParams: { merge?: string };
+}) {
   const storage = await getStorage();
   const person = await storage.getPerson(params.id);
   if (!person) notFound();
@@ -37,7 +44,7 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
     <div>
       <div className="flex items-start justify-between mb-1">
         <h1 className="text-xl font-medium">{displayName}</h1>
-        <DeletePersonButton personId={person.id} name={person.name} />
+        <DeletePersonButton personId={person.id} name={person.name} meetingCount={meetings.length} storyCount={stories.length} />
       </div>
       <p className="text-sm text-[#7a7768] mb-1">
         {[formatAge(person), person.education, person.career, person.companyTitle].filter(Boolean).join(" · ") || "등록된 프로필 정보 없음"}
@@ -49,8 +56,9 @@ export default async function PersonDetailPage({ params }: { params: { id: strin
         </p>
       )}
       {!lastMeetingDate && <p className="text-sm text-[#7a7768] mb-2">아직 함께한 모임이 없습니다.</p>}
-      <div className="mb-2">
+      <div className="mb-2 flex flex-col gap-2">
         <PersonEditForm person={person} />
+        <PersonMergePanel person={person} initialTargetId={searchParams.merge} />
       </div>
 
       {memberOfGroups.length > 0 && (
