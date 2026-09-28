@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-
-const COOKIE_NAME = "moim_auth";
+import { AUTH_COOKIE_NAME, authCookieOptions } from "@/lib/authConfig";
 // 로그인 화면 자체와, 구글이 직접 이 주소로 리디렉션해서 들어오는 구글 연동 경로는
 // 비밀번호 검사 없이 열어둔다. (둘 다 사람·장소·모임 데이터를 보여주지 않는 경로들이다)
 const PUBLIC_PATHS = ["/login", "/api/login", "/api/auth/google"];
@@ -26,9 +25,12 @@ export async function middleware(req: NextRequest) {
   }
 
   const expected = await sha256Hex(password);
-  const cookie = req.cookies.get(COOKIE_NAME)?.value;
+  const cookie = req.cookies.get(AUTH_COOKIE_NAME)?.value;
   if (cookie === expected) {
-    return NextResponse.next();
+    // 앱을 쓸 때마다 만료 시간을 다시 늘려준다 → 마지막 사용 후 일정 시간이 지나야 로그아웃된다.
+    const res = NextResponse.next();
+    res.cookies.set(AUTH_COOKIE_NAME, expected, authCookieOptions());
+    return res;
   }
 
   if (pathname.startsWith("/api/")) {

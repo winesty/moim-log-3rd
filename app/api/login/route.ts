@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHash } from "crypto";
-
-const COOKIE_NAME = "moim_auth";
+import { AUTH_COOKIE_NAME, authCookieOptions } from "@/lib/authConfig";
 
 export async function POST(req: NextRequest) {
   const { password } = await req.json().catch(() => ({ password: "" }));
@@ -16,19 +15,13 @@ export async function POST(req: NextRequest) {
 
   const token = createHash("sha256").update(expected).digest("hex");
   const res = NextResponse.json({ ok: true });
-  res.cookies.set(COOKIE_NAME, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 180, // 180일
-  });
+  res.cookies.set(AUTH_COOKIE_NAME, token, authCookieOptions());
   return res;
 }
 
 // 로그아웃 (필요할 때를 위해 같이 만들어둠)
 export async function DELETE() {
   const res = NextResponse.json({ ok: true });
-  res.cookies.delete(COOKIE_NAME);
+  res.cookies.delete(AUTH_COOKIE_NAME);
   return res;
 }
