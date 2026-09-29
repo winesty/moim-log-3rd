@@ -75,6 +75,13 @@ export default function PersonMergePanel({ person, initialTargetId }: { person: 
     }
     const merge_res_meetings = data.affectedMeetings ?? 0;
     const merge_res_stories = data.affectedStories ?? 0;
+    // 합치기가 끝났으니 패널을 접고 골라둔 대상도 지운다. (같은 화면에 머무는 경우, 이걸 안 하면
+    // 방금 지워진 사람이 패널에 그대로 남아있는 것처럼 보인다)
+    setOpen(false);
+    setTargetId("");
+    setOther(null);
+    setOtherStats(null);
+    setResolved({});
     const params = new URLSearchParams({
       mergedFrom: other.name,
       into: person.name,

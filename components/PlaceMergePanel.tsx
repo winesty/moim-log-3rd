@@ -67,6 +67,12 @@ export default function PlaceMergePanel({ place, initialTargetId }: { place: Pla
       setError(data.error ?? "합치기에 실패했습니다.");
       return;
     }
+    // 합치기가 끝났으니 패널을 접고 골라둔 대상도 지운다.
+    setOpen(false);
+    setTargetId("");
+    setOther(null);
+    setOtherStats(null);
+    setResolved({});
     const params = new URLSearchParams({
       mergedFrom: other.name,
       into: place.name,
