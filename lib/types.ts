@@ -14,6 +14,8 @@ export interface Person {
   id: ID;
   name: string;
   age?: string;
+  /** 생년월일 (YYYY-MM-DD). 알고 있으면 이걸로 나이를 자동 계산하고, 모르면 age 칸에 "40대", "93년생"처럼 대충 적어둔다. */
+  birthDate?: string;
   education?: string;
   family?: string;
   career?: string;
