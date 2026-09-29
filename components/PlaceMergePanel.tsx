@@ -61,13 +61,19 @@ export default function PlaceMergePanel({ place, initialTargetId }: { place: Pla
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ keepId: place.id, removeId: other.id, overrides: resolved }),
     });
+    const data = await res.json().catch(() => ({}));
     setSaving(false);
     if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
       setError(data.error ?? "합치기에 실패했습니다.");
       return;
     }
-    router.replace(`/places/${place.id}`);
+    const params = new URLSearchParams({
+      mergedFrom: other.name,
+      into: place.name,
+      meetings: String(data.affectedMeetings ?? 0),
+      menus: String(data.affectedMenus ?? 0),
+    });
+    router.replace(`/places/${place.id}?${params.toString()}`);
     router.refresh();
   }
 

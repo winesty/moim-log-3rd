@@ -4,6 +4,8 @@ import { getStorage } from "@/lib/storage";
 import DeletePersonButton from "@/components/DeletePersonButton";
 import PersonEditForm from "@/components/PersonEditForm";
 import PersonMergePanel from "@/components/PersonMergePanel";
+import MergeNotice from "@/components/MergeNotice";
+import { Suspense } from "react";
 import { personLabels, formatAge } from "@/lib/personDisplay";
 
 export const dynamic = "force-dynamic";
@@ -42,6 +44,9 @@ export default async function PersonDetailPage({
 
   return (
     <div>
+      <Suspense fallback={null}>
+        <MergeNotice />
+      </Suspense>
       <div className="flex items-start justify-between mb-1">
         <h1 className="text-xl font-medium">{displayName}</h1>
         <DeletePersonButton personId={person.id} name={person.name} meetingCount={meetings.length} storyCount={stories.length} />

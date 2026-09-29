@@ -67,13 +67,21 @@ export default function PersonMergePanel({ person, initialTargetId }: { person: 
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ keepId: person.id, removeId: other.id, overrides: resolved }),
     });
+    const data = await res.json().catch(() => ({}));
     setSaving(false);
     if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
       setError(data.error ?? "합치기에 실패했습니다.");
       return;
     }
-    router.replace(`/people/${person.id}`);
+    const merge_res_meetings = data.affectedMeetings ?? 0;
+    const merge_res_stories = data.affectedStories ?? 0;
+    const params = new URLSearchParams({
+      mergedFrom: other.name,
+      into: person.name,
+      meetings: String(merge_res_meetings),
+      stories: String(merge_res_stories),
+    });
+    router.replace(`/people/${person.id}?${params.toString()}`);
     router.refresh();
   }
 
