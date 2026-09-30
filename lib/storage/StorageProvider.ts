@@ -8,6 +8,7 @@ import {
   SearchQuery,
   MeetingSearchResult,
   PlaceSearchQuery,
+  BackupData,
 } from "@/lib/types";
 
 /**
@@ -60,6 +61,13 @@ export interface StorageProvider {
   /** keepId는 남기고 removeId는 없앤다. overrides로 넘긴 칸은 그 값을 쓰고, 나머지는 keep이 비어있을 때만 remove 값으로 채운다. */
   mergePeople(keepId: string, removeId: string, overrides?: Partial<Person>): Promise<MergePeopleResult>;
   mergePlaces(keepId: string, removeId: string, overrides?: Partial<Place>): Promise<MergePlacesResult>;
+
+  // --- 백업 / 복원 / 전체 삭제 ---
+  exportAll(): Promise<BackupData>;
+  /** 지금 데이터를 통째로 backup 내용으로 바꾼다 (되돌릴 수 없음) */
+  restoreAll(data: BackupData): Promise<void>;
+  /** 모든 사람·장소·모임·이야기·메뉴 이력을 지운다 (되돌릴 수 없음) */
+  deleteAll(): Promise<void>;
 
   // --- 시트 가져오기 (한 번에 읽고 한 번에 쓰기) ---
   bulkImport(data: BulkImportData): Promise<BulkImportResult>;

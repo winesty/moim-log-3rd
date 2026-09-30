@@ -7,6 +7,7 @@ import {
   MergePeopleResult,
   MergePlacesResult,
 } from "./StorageProvider";
+import { BackupData } from "@/lib/types";
 import {
   Meeting,
   Person,
@@ -365,6 +366,41 @@ export abstract class JsonBackedProvider implements StorageProvider {
     ]);
 
     return { place: merged, affectedMeetings, affectedMenus };
+  }
+
+  // --- 백업 / 복원 / 전체 삭제 ---
+  async exportAll(): Promise<BackupData> {
+    const [people, places, meetings, categories, groups, menuSnapshots] = await Promise.all([
+      this.listPeople(),
+      this.listPlaces(),
+      this.listMeetings(),
+      this.listCategories(),
+      this.listGroups(),
+      this.listMenuSnapshotsAll(),
+    ]);
+    return { version: 1, exportedAt: new Date().toISOString(), people, places, meetings, categories, groups, menuSnapshots };
+  }
+
+  async restoreAll(data: BackupData): Promise<void> {
+    await Promise.all([
+      this.writeFile(FILES.people, data.people ?? []),
+      this.writeFile(FILES.places, data.places ?? []),
+      this.writeFile(FILES.meetings, data.meetings ?? []),
+      this.writeFile(FILES.categories, data.categories ?? []),
+      this.writeFile(FILES.groups, data.groups ?? []),
+      this.writeFile(FILES.menuSnapshots, data.menuSnapshots ?? []),
+    ]);
+  }
+
+  async deleteAll(): Promise<void> {
+    await Promise.all([
+      this.writeFile(FILES.people, []),
+      this.writeFile(FILES.places, []),
+      this.writeFile(FILES.meetings, []),
+      this.writeFile(FILES.categories, []), // 비워두면 다음에 읽을 때 기본 카테고리로 다시 채워진다
+      this.writeFile(FILES.groups, []),
+      this.writeFile(FILES.menuSnapshots, []),
+    ]);
   }
 
   // --- 시트 가져오기 ---

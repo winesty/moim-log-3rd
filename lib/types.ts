@@ -32,6 +32,17 @@ export interface Person {
   updatedAt: string;
 }
 
+export interface BackupData {
+  version: number;
+  exportedAt: string;
+  people: Person[];
+  places: Place[];
+  meetings: Meeting[];
+  categories: StoryCategory[];
+  groups: Group[];
+  menuSnapshots: MenuSnapshot[];
+}
+
 export type OperatingStatus = "operating" | "closed_suspected" | "unconfirmed";
 
 /**
