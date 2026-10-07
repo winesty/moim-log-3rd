@@ -154,6 +154,8 @@ export default function MeetingForm({
   );
   const [newCategoryLabel, setNewCategoryLabel] = useState("");
   const [saving, setSaving] = useState(false);
+  const [scanningStopIdx, setScanningStopIdx] = useState<number | null>(null);
+  const [scanError, setScanError] = useState("");
 
   // 편집 모드에서는 기존에 골라둔 장소의 '현재 메뉴'를 화면에 띄워서, 필요하면 거기서도 더 골라 담을 수 있게 한다.
   useEffect(() => {
@@ -224,6 +226,58 @@ export default function MeetingForm({
     updateStop(idx, { newOrderRows: stops[idx].newOrderRows.filter((_, ri) => ri !== rowIdx) });
   }
 
+  async function handleReceiptFile(idx: number, file: File | undefined) {
+    if (!file) return;
+    setScanningStopIdx(idx);
+    setScanError("");
+    try {
+      const imageBase64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = String(reader.result ?? "");
+          resolve(result.slice(result.indexOf(",") + 1)); // "data:image/...;base64," 접두어 제거
+        };
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+      });
+      const res = await fetch("/api/receipt/scan", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ imageBase64, mimeType: file.type || "image/jpeg" }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setScanError(data.error ?? "영수증을 읽지 못했어요.");
+        return;
+      }
+
+      const patch: Partial<StopDraft> = {};
+      if (data.totalAmount != null) patch.amount = String(data.totalAmount);
+      if (Array.isArray(data.items) && data.items.length > 0) {
+        const newRows: OrderRow[] = data.items.map((it: any) => ({
+          name: it.name ?? "",
+          price: it.price != null ? String(it.price) : "",
+          qty: it.quantity != null ? String(it.quantity) : "1",
+        }));
+        patch.newOrderRows = [...stops[idx].newOrderRows, ...newRows];
+      }
+      updateStop(idx, patch);
+
+      // 장소는 바로 연결하지 않고, 이미 등록된 장소면 골라주고 아니면 '새 장소' 칸에 이름만 채워서 확인받는다.
+      if (data.placeName) {
+        const matches = findPlacesByName(places, data.placeName);
+        if (matches.length > 0) await selectPlaceForStop(idx, matches[0].id);
+        else updateStop(idx, { showNewPlace: true, newPlaceName: data.placeName });
+      }
+
+      if (data.date && /^\d{4}-\d{2}-\d{2}$/.test(data.date)) setDate(data.date);
+    } catch {
+      setScanError("영수증을 읽는 중 오류가 발생했어요. 인터넷 연결을 확인해주세요.");
+    } finally {
+      setScanningStopIdx(null);
+    }
+  }
+
   async function addPlaceForStop(idx: number) {
     const name = stops[idx].newPlaceName.trim();
     if (!name) return;
@@ -254,25 +308,47 @@ export default function MeetingForm({
   }
 
   // 참석자·이야기는 모두 "지금 보고 있는 차수"를 기준으로 추가/삭제된다.
+  // setStops를 함수형으로 써서, 연달아 눌러도 항상 "그 순간의 최신 목록"에 더해지게 한다
+  // (바로 전 값을 변수로 들고 있다가 쓰면, 화면이 미처 안 바뀐 사이 다음 걸 눌렀을 때 먼저 추가한 게 덮어써질 수 있다).
   function addAttendeeFromPick() {
     if (!attendeePick) return;
-    const stop = stops[activeStopIdx];
     const [kind, id] = attendeePick.split(":");
     const idsToAdd: string[] = kind === "group" ? groups.find((g) => g.id === id)?.memberIds ?? [] : [id];
-    const newIds = idsToAdd.filter((pid) => !stop.attendeeIds.includes(pid));
-    if (newIds.length === 0) {
-      setAttendeePick("");
-      return;
+    let addedIds: string[] = [];
+    let stopId = "";
+    setStops((prev) =>
+      prev.map((s, i) => {
+        if (i !== activeStopIdx) return s;
+        stopId = s.tempId;
+        addedIds = idsToAdd.filter((pid) => !s.attendeeIds.includes(pid));
+        return addedIds.length > 0 ? { ...s, attendeeIds: [...s.attendeeIds, ...addedIds] } : s;
+      })
+    );
+    if (addedIds.length > 0) {
+      setStories((prev) => [...prev, ...addedIds.map((pid) => ({ tempId: crypto.randomUUID(), personId: pid, content: "", stopId }))]);
     }
-    updateStop(activeStopIdx, { attendeeIds: [...stop.attendeeIds, ...newIds] });
-    setStories((prev) => [...prev, ...newIds.map((pid) => ({ tempId: crypto.randomUUID(), personId: pid, content: "", stopId: stop.tempId }))]);
     setAttendeePick("");
+  }
+
+  // 그 차수에 사람을 하나 더해주는 공용 함수. 함수형 setStops라, 그 사이에 다른 추가/삭제가
+  // 끼어들어도 서로 덮어쓰지 않는다. (addNewPerson처럼 네트워크 요청으로 기다리는 동안
+  // 사용자가 다른 조작을 할 수 있는 경우에 특히 중요하다)
+  function addPersonToActiveStop(stopId: string, personId: string) {
+    let added = false;
+    setStops((prev) =>
+      prev.map((s) => {
+        if (s.tempId !== stopId || s.attendeeIds.includes(personId)) return s;
+        added = true;
+        return { ...s, attendeeIds: [...s.attendeeIds, personId] };
+      })
+    );
+    if (added) setStories((prev) => [...prev, { tempId: crypto.randomUUID(), personId, content: "", stopId }]);
   }
 
   async function addNewPerson() {
     const trimmed = newPersonName.trim();
     if (!trimmed) return;
-    const stop = stops[activeStopIdx];
+    const stopId = stops[activeStopIdx].tempId;
 
     // 이미 같은 이름의 사람이 있으면 실수로 중복 등록하는 걸 막기 위해 한 번 확인한다.
     // 동명이인 자체는 지원하니(최초 만난 일자로 구분), 그래도 새로 만들겠다면 막지는 않는다.
@@ -283,11 +359,7 @@ export default function MeetingForm({
         `"${trimmed}" 이름의 참석자가 이미 있어요 (${existingLabel}).\n\n확인 → 기존 참석자로 추가할게요\n취소 → 그래도 새로 만들게요`
       );
       if (useExisting) {
-        const pickId = duplicates[0].id;
-        if (!stop.attendeeIds.includes(pickId)) {
-          updateStop(activeStopIdx, { attendeeIds: [...stop.attendeeIds, pickId] });
-          setStories((prev) => [...prev, { tempId: crypto.randomUUID(), personId: pickId, content: "", stopId: stop.tempId }]);
-        }
+        addPersonToActiveStop(stopId, duplicates[0].id);
         setNewPersonName("");
         return;
       }
@@ -305,8 +377,9 @@ export default function MeetingForm({
       }
       const created: Person = await res.json();
       setPeople((prev) => [...prev, created]);
-      updateStop(activeStopIdx, { attendeeIds: [...stop.attendeeIds, created.id] });
-      setStories((prev) => [...prev, { tempId: crypto.randomUUID(), personId: created.id, content: "", stopId: stop.tempId }]);
+      // await 하는 동안 다른 추가가 있었을 수 있으니, 저장해둔 stopId를 기준으로 그 차수에 더한다
+      // (활성 차수가 그 사이 바뀌었더라도 처음 누른 차수에 정확히 들어간다).
+      addPersonToActiveStop(stopId, created.id);
       setNewPersonName("");
     } catch (err) {
       alert("참석자 추가 중 오류가 발생했습니다. 인터넷 연결을 확인해주세요.");
@@ -315,15 +388,17 @@ export default function MeetingForm({
 
   // 이 차수에서만 뺀다. 다른 차수에 같은 사람이 있으면 거기엔 그대로 남는다.
   function removeAttendee(id: string) {
-    const stop = stops[activeStopIdx];
-    updateStop(activeStopIdx, { attendeeIds: stop.attendeeIds.filter((x) => x !== id) });
-    setStories((prev) => prev.filter((s) => !(s.personId === id && s.stopId === stop.tempId)));
+    const stopId = stops[activeStopIdx].tempId;
+    setStops((prev) => prev.map((s) => (s.tempId === stopId ? { ...s, attendeeIds: s.attendeeIds.filter((x) => x !== id) } : s)));
+    setStories((prev) => prev.filter((s) => !(s.personId === id && s.stopId === stopId)));
   }
 
   function removeGroup(group: Group) {
-    const stop = stops[activeStopIdx];
-    updateStop(activeStopIdx, { attendeeIds: stop.attendeeIds.filter((x) => !group.memberIds.includes(x)) });
-    setStories((prev) => prev.filter((s) => !(group.memberIds.includes(s.personId) && s.stopId === stop.tempId)));
+    const stopId = stops[activeStopIdx].tempId;
+    setStops((prev) =>
+      prev.map((s) => (s.tempId === stopId ? { ...s, attendeeIds: s.attendeeIds.filter((x) => !group.memberIds.includes(x)) } : s))
+    );
+    setStories((prev) => prev.filter((s) => !(group.memberIds.includes(s.personId) && s.stopId === stopId)));
   }
 
   function addStoryBlock() {
@@ -524,6 +599,25 @@ export default function MeetingForm({
                 이 차수 삭제
               </button>
             )}
+          </div>
+
+          <div className="mb-2">
+            <label className="inline-block px-3 py-2 border border-dashed border-[#ddd8ca] bg-[#faf8f3] text-sm text-[#2b2a26] cursor-pointer">
+              {scanningStopIdx === activeStopIndexInArray ? "영수증 분석 중..." : "📷 영수증으로 채우기"}
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                disabled={scanningStopIdx !== null}
+                onChange={(e) => {
+                  handleReceiptFile(activeStopIndexInArray, e.target.files?.[0]);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+            <p className="text-xs text-[#a09c8c] mt-1">사진을 올리면 장소·금액·메뉴를 채워드려요. 채워진 내용은 저장 전에 한 번 확인해주세요.</p>
+            {scanError && <p className="text-xs text-[#a34a3a] mt-1">{scanError}</p>}
           </div>
 
           <div className="flex gap-2">
