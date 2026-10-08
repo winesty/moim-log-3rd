@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
 
   // 사진이면 이미지와 함께, 붙여넣은 글이면 프롬프트 뒤에 그 글을 그대로 덧붙여서 보낸다.
   const parts = imageBase64
-    ? [{ text: PROMPT }, { inline_data: { mime_type: mimeType || "image/jpeg", data: imageBase64 } }]
+    ? [{ text: PROMPT }, { inlineData: { mimeType: mimeType || "image/jpeg", data: imageBase64 } }]
     : [{ text: `${PROMPT}
 
 --- 입력 ---
@@ -78,7 +78,8 @@ ${trimmedText}` }];
       const errText = await res.text();
       console.error("Gemini API error:", res.status, errText);
       const status = res.status === 429 ? 429 : 502;
-      const message = res.status === 429 ? "오늘 무료 사용량을 다 썼어요. 잠시 후 다시 시도해주세요." : "영수증을 분석하지 못했어요.";
+      const message =
+        res.status === 429 ? "오늘 무료 사용량을 다 썼어요. 잠시 후 다시 시도해주세요." : `영수증을 분석하지 못했어요. (오류 코드 ${res.status})`;
       return NextResponse.json({ error: message }, { status });
     }
 
