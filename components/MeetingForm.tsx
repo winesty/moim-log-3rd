@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Person, Place, StoryCategory, MenuSnapshot, Group, formatMeetingDuration, derivePresentGroups } from "@/lib/types";
@@ -156,6 +156,10 @@ export default function MeetingForm({
   const [saving, setSaving] = useState(false);
   const [scanningStopIdx, setScanningStopIdx] = useState<number | null>(null);
   const [scanError, setScanError] = useState("");
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [pendingPreviewUrl, setPendingPreviewUrl] = useState<string | null>(null);
+  const [pendingText, setPendingText] = useState("");
+  const receiptFileInput = useRef<HTMLInputElement>(null);
 
   // 편집 모드에서는 기존에 골라둔 장소의 '현재 메뉴'를 화면에 띄워서, 필요하면 거기서도 더 골라 담을 수 있게 한다.
   useEffect(() => {
@@ -226,28 +230,80 @@ export default function MeetingForm({
     updateStop(idx, { newOrderRows: stops[idx].newOrderRows.filter((_, ri) => ri !== rowIdx) });
   }
 
-  async function handleReceiptFile(idx: number, file: File | undefined) {
-    if (!file) return;
+  function fileToBase64(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = String(reader.result ?? "");
+        resolve(result.slice(result.indexOf(",") + 1)); // "data:image/...;base64," 접두어 제거
+      };
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function setPendingImage(file: File) {
+    setPendingText("");
+    setPendingPreviewUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return URL.createObjectURL(file);
+    });
+    setPendingFile(file);
+  }
+
+  function clearPendingReceipt() {
+    setPendingPreviewUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
+    setPendingFile(null);
+    setPendingText("");
+  }
+
+  function handleReceiptPaste(e: React.ClipboardEvent) {
+    const items = Array.from(e.clipboardData.items ?? []);
+    const imageItem = items.find((it) => it.kind === "file" && it.type.startsWith("image/"));
+    if (imageItem) {
+      e.preventDefault();
+      const file = imageItem.getAsFile();
+      if (file) setPendingImage(file);
+      return;
+    }
+    const text = e.clipboardData.getData("text/plain");
+    if (text.trim()) {
+      e.preventDefault();
+      setPendingFile(null);
+      setPendingPreviewUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return null;
+      });
+      setPendingText(text.trim());
+    }
+  }
+
+  function handleReceiptDrop(e: React.DragEvent) {
+    e.preventDefault();
+    const file = Array.from(e.dataTransfer.files ?? []).find((f) => f.type.startsWith("image/"));
+    if (file) setPendingImage(file);
+  }
+
+  // 사진이든 붙여넣은 글이든 같은 곳(/api/receipt/scan)에 보내고, 받은 결과를 그 차수에 채워준다.
+  async function runReceiptScan(idx: number) {
+    if (!pendingFile && !pendingText.trim()) return;
     setScanningStopIdx(idx);
     setScanError("");
     try {
-      const imageBase64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          const result = String(reader.result ?? "");
-          resolve(result.slice(result.indexOf(",") + 1)); // "data:image/...;base64," 접두어 제거
-        };
-        reader.onerror = () => reject(reader.error);
-        reader.readAsDataURL(file);
-      });
+      const body = pendingFile
+        ? { imageBase64: await fileToBase64(pendingFile), mimeType: pendingFile.type || "image/jpeg" }
+        : { text: pendingText.trim() };
       const res = await fetch("/api/receipt/scan", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ imageBase64, mimeType: file.type || "image/jpeg" }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       if (!res.ok) {
-        setScanError(data.error ?? "영수증을 읽지 못했어요.");
+        setScanError(data.error ?? "읽지 못했어요.");
         return;
       }
 
@@ -271,8 +327,9 @@ export default function MeetingForm({
       }
 
       if (data.date && /^\d{4}-\d{2}-\d{2}$/.test(data.date)) setDate(data.date);
+      clearPendingReceipt();
     } catch {
-      setScanError("영수증을 읽는 중 오류가 발생했어요. 인터넷 연결을 확인해주세요.");
+      setScanError("읽는 중 오류가 발생했어요. 인터넷 연결을 확인해주세요.");
     } finally {
       setScanningStopIdx(null);
     }
@@ -602,21 +659,80 @@ export default function MeetingForm({
           </div>
 
           <div className="mb-2">
-            <label className="inline-block px-3 py-2 border border-dashed border-[#ddd8ca] bg-[#faf8f3] text-sm text-[#2b2a26] cursor-pointer">
-              {scanningStopIdx === activeStopIndexInArray ? "영수증 분석 중..." : "📷 영수증으로 채우기"}
+            <div
+              tabIndex={0}
+              onClick={() => {
+                if (!pendingFile && !pendingText) receiptFileInput.current?.click();
+              }}
+              onPaste={handleReceiptPaste}
+              onDrop={handleReceiptDrop}
+              onDragOver={(e) => e.preventDefault()}
+              className="border border-dashed border-[#ddd8ca] bg-[#faf8f3] rounded-lg p-3 cursor-pointer outline-none focus:border-[#b4622f]"
+            >
+              {!pendingFile && !pendingText && (
+                <p className="text-sm text-[#7a7768]">
+                  📷 영수증 채우기 — 여기에 붙여넣거나(⌘V), 사진을 끌어다 놓거나, 클릭해서 골라주세요
+                </p>
+              )}
+              {pendingPreviewUrl && (
+                <div className="flex items-center gap-2">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={pendingPreviewUrl} alt="" className="w-12 h-12 object-cover rounded border border-[#ddd8ca]" />
+                  <span className="text-sm text-[#2b2a26] flex-1">사진 1장 준비됨</span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      clearPendingReceipt();
+                    }}
+                    className="text-xs text-[#a34a3a] bg-transparent p-0"
+                  >
+                    취소
+                  </button>
+                </div>
+              )}
+              {pendingText && (
+                <div className="flex items-start gap-2">
+                  <span className="text-sm text-[#2b2a26] flex-1 line-clamp-2 whitespace-pre-wrap">{pendingText}</span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      clearPendingReceipt();
+                    }}
+                    className="text-xs text-[#a34a3a] bg-transparent p-0 shrink-0"
+                  >
+                    취소
+                  </button>
+                </div>
+              )}
               <input
+                ref={receiptFileInput}
                 type="file"
                 accept="image/*"
                 capture="environment"
                 className="hidden"
-                disabled={scanningStopIdx !== null}
                 onChange={(e) => {
-                  handleReceiptFile(activeStopIndexInArray, e.target.files?.[0]);
+                  const file = e.target.files?.[0];
+                  if (file) setPendingImage(file);
                   e.target.value = "";
                 }}
               />
-            </label>
-            <p className="text-xs text-[#a09c8c] mt-1">사진을 올리면 장소·금액·메뉴를 채워드려요. 채워진 내용은 저장 전에 한 번 확인해주세요.</p>
+            </div>
+
+            {(pendingFile || pendingText) && (
+              <button
+                type="button"
+                onClick={() => runReceiptScan(activeStopIndexInArray)}
+                disabled={scanningStopIdx !== null}
+                className="w-full mt-2 py-2 bg-[#2b2a26] text-white text-sm disabled:opacity-50"
+              >
+                {scanningStopIdx === activeStopIndexInArray ? "분석 중..." : "분석해서 채우기"}
+              </button>
+            )}
+            <p className="text-xs text-[#a09c8c] mt-1">
+              영수증 사진이나 카드 승인 문자를 붙여넣으면 장소·금액·메뉴를 채워드려요. 채워진 내용은 저장 전에 한 번 확인해주세요.
+            </p>
             {scanError && <p className="text-xs text-[#a34a3a] mt-1">{scanError}</p>}
           </div>
 
