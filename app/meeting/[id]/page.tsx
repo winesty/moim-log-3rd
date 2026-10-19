@@ -8,7 +8,7 @@ import AddStopForm from "@/components/AddStopForm";
 import DeleteStopButton from "@/components/DeleteStopButton";
 import DeleteMeetingButton from "@/components/DeleteMeetingButton";
 import { latestMenuSnapshot } from "@/lib/storage/searchHelper";
-import { formatMeetingDuration, derivePresentGroups } from "@/lib/types";
+import { formatMeetingDuration, derivePresentGroups, STOP_KIND_META } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -75,7 +75,7 @@ export default async function MeetingDetailPage({ params }: { params: { id: stri
           <div key={stop.id} className="bg-white border border-[#ddd8ca] rounded-xl p-4">
             <div className="flex items-center justify-between mb-1">
               <p className="font-medium text-sm">
-                {stop.label} · {place?.name ?? "장소 미상"}
+                {STOP_KIND_META[stop.kind ?? "meal"].icon} {stop.label} · {place?.name ?? "장소 미상"}
               </p>
               {meeting.stops.length > 1 && <DeleteStopButton meetingId={meeting.id} stopId={stop.id} label={stop.label} />}
             </div>
@@ -87,8 +87,15 @@ export default async function MeetingDetailPage({ params }: { params: { id: stri
                 주문: {stop.orderedItems.map((it) => `${it.name} x${it.quantity}${it.price ? `(${it.price.toLocaleString()}원)` : ""}`).join(", ")}
               </p>
             )}
-            {stop.amount != null && <p className="text-xs text-[#a09c8c] mb-2">금액: {stop.amount.toLocaleString()}원</p>}
-            <AddOrderedItemForm meetingId={meeting.id} stopId={stop.id} currentMenu={currentMenu} />
+            {stop.amount != null && (
+              <p className="text-xs text-[#a09c8c] mb-2">
+                금액: {stop.amount.toLocaleString()}원
+                {stop.settlementMode && stop.settlementMode !== "full" && stop.myShare != null && (
+                  <> (내 부담 {stop.myShare.toLocaleString()}원{stop.settlementMode === "split" && stop.splitCount ? ` · ${stop.splitCount}명 더치페이` : ""})</>
+                )}
+              </p>
+            )}
+            {(stop.kind ?? "meal") === "meal" && <AddOrderedItemForm meetingId={meeting.id} stopId={stop.id} currentMenu={currentMenu} />}
 
             {stopStories.length > 0 && (
               <div className="flex flex-col gap-2 mt-3">

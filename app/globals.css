@@ -9,12 +9,30 @@ body {
 
 input,
 select,
+textarea,
+button {
+  box-sizing: border-box;
+}
+
+input,
+select,
 textarea {
   border: 1px solid #ddd8ca;
   border-radius: 8px;
   padding: 8px 10px;
   background: white;
   font-size: 14px;
+}
+
+/* 아이폰 사파리는 select·date·time을 자기 방식대로 더 크게 그려서, 같은 줄의 버튼과
+   높이가 어긋나 보인다. 높이를 명시해서 플랫폼과 상관없이 항상 같은 높이로 맞춘다. */
+input,
+select,
+button {
+  min-height: 40px;
+}
+textarea {
+  min-height: 72px;
 }
 
 input:focus,

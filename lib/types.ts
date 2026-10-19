@@ -108,6 +108,23 @@ export interface OrderedItem {
  * 모임의 "한 차수"(1차/2차/3차 등). 같은 모임(같은 날, 같은 참석자)이
  * 장소를 옮겨가며 이어질 수 있어, 장소/메뉴/금액을 차수 단위로 따로 관리한다.
  */
+/** 이 차수의 성격. 없으면 "meal"(식사)로 본다 — 구분이 생기기 전 기록과 호환하기 위해서다. */
+export type StopKind = "meal" | "activity" | "event" | "online";
+
+/** 금액을 어떻게 정산했는지. 없으면 "full"(내가 전액 결제)로 본다. */
+export type SettlementMode = "full" | "split" | "other";
+
+/** 차수 성격별로 보여줄 라벨·칸 구성. 입력 화면과 상세 화면이 같이 쓴다. */
+export const STOP_KIND_META: Record<
+  StopKind,
+  { label: string; icon: string; placeLabel: string; amountLabel: string; receipt: boolean; menu: boolean; settlement: boolean }
+> = {
+  meal: { label: "식사", icon: "🍚", placeLabel: "장소", amountLabel: "금액", receipt: true, menu: true, settlement: true },
+  activity: { label: "활동", icon: "⛳", placeLabel: "활동 장소", amountLabel: "비용 (그린피 등)", receipt: true, menu: false, settlement: true },
+  event: { label: "행사", icon: "🎊", placeLabel: "장소", amountLabel: "낸 금액 (있는 경우만)", receipt: false, menu: false, settlement: true },
+  online: { label: "온라인", icon: "💻", placeLabel: "모임 방식", amountLabel: "비용 (있는 경우만)", receipt: false, menu: false, settlement: false },
+};
+
 export interface Stop {
   id: ID;
   label: string; // "1차", "2차" 등. 사용자가 직접 바꿀 수도 있음
@@ -117,6 +134,12 @@ export interface Stop {
   /** 이 차수에 있었던 사람들. 차수마다 인원이 달라질 수 있어 모임 전체 참석자와 별개로 둔다.
    *  차수 구분이 생기기 전 기록에는 없을 수 있음(그 경우 모임 전체 참석자와 같다고 본다). */
   attendeeIds?: ID[];
+  kind?: StopKind;
+  settlementMode?: SettlementMode;
+  /** 더치페이일 때 나눈 인원수 */
+  splitCount?: number;
+  /** 정산 방식에 따라 계산되거나(또는 직접 고친) 내 실제 부담액. amount와 다를 수 있다. */
+  myShare?: number;
 }
 
 export interface Meeting {

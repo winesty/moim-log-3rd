@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Person, Place, StoryCategory, MenuSnapshot, Group, formatMeetingDuration, derivePresentGroups } from "@/lib/types";
+import { Person, Place, StoryCategory, MenuSnapshot, Group, StopKind, SettlementMode, STOP_KIND_META, formatMeetingDuration, derivePresentGroups } from "@/lib/types";
 import { findPlacesByName, sortPlacesByName } from "@/lib/storage/searchHelper";
 import { personLabels } from "@/lib/personDisplay";
 
@@ -21,6 +21,12 @@ type StopDraft = {
   amount: string;
   /** 이 차수에 있었던 사람들. 차수마다 인원이 다를 수 있어 차수별로 따로 관리한다. */
   attendeeIds: string[];
+  /** 이 차수의 성격 (식사/활동/행사/온라인). 성격에 따라 메뉴·정산 등 보이는 칸이 달라진다. */
+  kind: StopKind;
+  settlementMode: SettlementMode;
+  splitCount: string;
+  /** 정산 방식에 따라 자동 계산되거나, 직접 고친 내 실제 부담액 */
+  myShare: string;
 };
 
 function makeStopDraft(label: string, attendeeIds: string[] = []): StopDraft {
@@ -35,8 +41,14 @@ function makeStopDraft(label: string, attendeeIds: string[] = []): StopDraft {
     newOrderRows: [],
     amount: "",
     attendeeIds,
+    kind: "meal",
+    settlementMode: "full",
+    splitCount: "",
+    myShare: "",
   };
 }
+
+
 
 function computeStopTotal(stop: Pick<StopDraft, "currentMenu" | "orderQty" | "newOrderRows">): number {
   let total = 0;
@@ -83,6 +95,10 @@ export interface EditableMeetingDraft {
     amount?: number;
     orderedItems: { name: string; price?: number; quantity: number }[];
     attendeeIds: string[];
+    kind?: StopKind;
+    settlementMode?: SettlementMode;
+    splitCount?: number;
+    myShare?: number;
   }[];
   stories: { id: string; personId: string; content: string; createdAt: string; stopId?: string }[];
 }
@@ -96,6 +112,11 @@ function draftStopsFromInitial(stops: EditableMeetingDraft["stops"]): StopDraft[
     // 기존 주문 내역은 '메뉴에 없는 항목' 자유 입력 칸으로 옮겨서, 그 자리에서 이름/가격/수량을 그대로 고치거나 지울 수 있게 한다.
     // (현재 장소 메뉴 체크박스는 최신 메뉴 기준이라, 주문 당시와 항목 id가 다를 수 있어 그대로 매칭하지 않는다)
     newOrderRows: s.orderedItems.map((it) => ({ name: it.name, price: it.price != null ? String(it.price) : "", qty: String(it.quantity) })),
+    // 성격·정산 구분이 생기기 전 기록은 kind가 없으니, 그때는 "식사·전액 결제"로 본다 (지금까지 동작과 같음).
+    kind: s.kind ?? "meal",
+    settlementMode: s.settlementMode ?? "full",
+    splitCount: s.splitCount != null ? String(s.splitCount) : "",
+    myShare: s.myShare != null ? String(s.myShare) : s.amount != null ? String(s.amount) : "",
   }));
 }
 
@@ -175,6 +196,26 @@ export default function MeetingForm({
 
   function updateStop(idx: number, patch: Partial<StopDraft>) {
     setStops((prev) => prev.map((s, i) => (i === idx ? { ...s, ...patch } : s)));
+  }
+
+  // 정산 방식·금액·인원수 중 하나라도 바뀌면 "내 실제 부담액"을 다시 자동 계산해서 채운다.
+  // (그 칸을 직접 고쳐둔 상태라도, 이 셋 중 하나를 또 바꾸면 새로 계산된 값으로 돌아간다 —
+  // 1차 금액이 메뉴를 다시 고르면 새로 계산되는 것과 같은 방식이다.)
+  function recomputeMyShare(idx: number, overrides: Partial<Pick<StopDraft, "amount" | "settlementMode" | "splitCount">> = {}) {
+    setStops((prev) =>
+      prev.map((s, i) => {
+        if (i !== idx) return s;
+        const amount = Number((overrides.amount ?? s.amount).replace(/[^0-9.]/g, "")) || 0;
+        const mode = overrides.settlementMode ?? s.settlementMode;
+        let myShare = amount;
+        if (mode === "other") myShare = 0;
+        else if (mode === "split") {
+          const count = Math.max(1, Number(overrides.splitCount ?? s.splitCount) || 1);
+          myShare = amount / count;
+        }
+        return { ...s, ...overrides, myShare: myShare ? String(Math.round(myShare)) : "" };
+      })
+    );
   }
 
   function addStop() {
@@ -521,6 +562,10 @@ export default function MeetingForm({
         amount: s.amount ? Number(s.amount) : undefined,
         orderedItems: buildOrderedItemsForStop(s),
         attendeeIds: s.attendeeIds,
+        kind: s.kind,
+        settlementMode: s.settlementMode,
+        splitCount: s.settlementMode === "split" && s.splitCount ? Number(s.splitCount) : undefined,
+        myShare: s.myShare ? Number(s.myShare) : undefined,
       })),
       stories: stories
         .filter((s) => s.content.trim())
@@ -567,7 +612,7 @@ export default function MeetingForm({
 
   return (
     <div className="bg-white border border-[#ddd8ca] rounded-2xl p-5 flex flex-col gap-5">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label className="text-xs text-[#7a7768] block mb-1">일자</label>
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full" />
@@ -599,7 +644,7 @@ export default function MeetingForm({
                 지우기
               </button>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-xs text-[#7a7768] block mb-1">종료 일자</label>
                 <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full" />
@@ -658,7 +703,26 @@ export default function MeetingForm({
             )}
           </div>
 
-          <div className="mb-2">
+          <div className="mb-3">
+            <label className="text-xs text-[#7a7768] block mb-1">이 차수의 성격</label>
+            <div className="flex gap-1 flex-wrap">
+              {(Object.keys(STOP_KIND_META) as StopKind[]).map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => updateStop(activeStopIndexInArray, { kind: k })}
+                  className={`flex-1 min-w-[72px] py-2 px-1 text-xs rounded-lg border ${
+                    activeStop.kind === k ? "bg-[#2b2a26] text-white border-[#2b2a26]" : "bg-white text-[#2b2a26] border-[#ddd8ca]"
+                  }`}
+                >
+                  {STOP_KIND_META[k].icon} {STOP_KIND_META[k].label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {STOP_KIND_META[activeStop.kind].receipt && (
+            <div className="mb-2">
             <div
               tabIndex={0}
               onClick={() => {
@@ -734,13 +798,15 @@ export default function MeetingForm({
               영수증 사진이나 카드 승인 문자를 붙여넣으면 장소·금액·메뉴를 채워드려요. 채워진 내용은 저장 전에 한 번 확인해주세요.
             </p>
             {scanError && <p className="text-xs text-[#a34a3a] mt-1">{scanError}</p>}
-          </div>
+            </div>
+          )}
 
+          <label className="text-xs text-[#7a7768] block mb-1">{STOP_KIND_META[activeStop.kind].placeLabel}</label>
           <div className="flex gap-2">
             <select
               value={activeStop.placeId}
               onChange={(e) => selectPlaceForStop(activeStopIndexInArray, e.target.value)}
-              className="flex-1"
+              className="flex-1 min-w-0"
             >
               <option value="">기존 장소에서 선택...</option>
               {sortPlacesByName(places).map((p) => (
@@ -791,6 +857,8 @@ export default function MeetingForm({
                 </button>
               </div>
 
+              {STOP_KIND_META[activeStop.kind].menu && (
+              <>
               <p className="text-xs font-medium text-[#2b2a26] mb-1">메뉴 주문 (수량 선택 시 금액 자동 계산)</p>
               {activeStop.currentMenu && activeStop.currentMenu.items.length > 0 ? (
                 <div className="flex flex-col gap-1 mb-2">
@@ -851,6 +919,8 @@ export default function MeetingForm({
               </button>
 
               {activeTotal > 0 && <p className="text-xs text-[#b4622f]">주문 합계: {activeTotal.toLocaleString()}원 (아래 금액에 자동 반영됨)</p>}
+              </>
+              )}
 
               <Link href={`/places/${activePlace.id}`} className="text-xs text-[#b4622f] block mt-2">
                 장소 상세/메뉴 갱신
@@ -859,15 +929,72 @@ export default function MeetingForm({
           )}
 
           <div className="mt-3">
-            <label className="text-xs text-[#7a7768] block mb-1">{activeStop.label} 금액 (메뉴 선택 시 자동 계산, 직접 수정도 가능)</label>
+            <label className="text-xs text-[#7a7768] block mb-1">
+              {STOP_KIND_META[activeStop.kind].amountLabel}
+              {STOP_KIND_META[activeStop.kind].menu ? " (메뉴 선택 시 자동 계산, 직접 수정도 가능)" : ""}
+            </label>
             <input
               type="number"
               placeholder="120000"
               value={activeStop.amount}
-              onChange={(e) => updateStop(activeStopIndexInArray, { amount: e.target.value })}
+              onChange={(e) => recomputeMyShare(activeStopIndexInArray, { amount: e.target.value })}
               className="w-full"
             />
           </div>
+
+          {STOP_KIND_META[activeStop.kind].settlement && (
+            <div className="mt-3">
+              <label className="text-xs text-[#7a7768] block mb-2">정산 방식</label>
+              <div className="flex gap-1">
+                {([
+                  ["full", "내가 전액 결제"],
+                  ["split", "더치페이"],
+                  ["other", "다른 사람 결제"],
+                ] as [SettlementMode, string][]).map(([mode, label]) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() =>
+                      recomputeMyShare(activeStopIndexInArray, {
+                        settlementMode: mode,
+                        // 더치페이를 처음 고르면, 그 차수 참석자 수를 기본값으로 채워준다.
+                        splitCount: mode === "split" && !activeStop.splitCount ? String(Math.max(1, activeStop.attendeeIds.length)) : activeStop.splitCount,
+                      })
+                    }
+                    className={`flex-1 py-2 px-1 text-xs rounded-lg border ${
+                      activeStop.settlementMode === mode ? "bg-[#2b2a26] text-white border-[#2b2a26]" : "bg-white text-[#2b2a26] border-[#ddd8ca]"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {activeStop.settlementMode === "split" && (
+                <div className="flex items-center gap-2 mt-2">
+                  <span className="text-sm text-[#2b2a26]">몇 명이 나눴나요</span>
+                  <input
+                    type="number"
+                    min={1}
+                    value={activeStop.splitCount}
+                    onChange={(e) => recomputeMyShare(activeStopIndexInArray, { splitCount: e.target.value })}
+                    className="w-16 text-sm text-center"
+                  />
+                  <span className="text-sm text-[#2b2a26]">명</span>
+                </div>
+              )}
+
+              <div className="mt-2">
+                <label className="text-xs text-[#7a7768] block mb-1">내 실제 부담액 (직접 고칠 수 있어요)</label>
+                <input
+                  type="number"
+                  value={activeStop.myShare}
+                  onChange={(e) => updateStop(activeStopIndexInArray, { myShare: e.target.value })}
+                  className="w-full font-medium text-[#b4622f]"
+                />
+              </div>
+            </div>
+          )}
 
           {/* 이 차수 참석자 */}
           <div className="mt-4 pt-4 border-t border-[#ddd8ca]">
@@ -908,7 +1035,7 @@ export default function MeetingForm({
               {activeAttendeeIds.length === 0 && <p className="text-xs text-[#a09c8c]">아직 이 차수에 참석자가 없어요.</p>}
             </div>
             <div className="flex gap-2">
-              <select value={attendeePick} onChange={(e) => setAttendeePick(e.target.value)} className="flex-1">
+              <select value={attendeePick} onChange={(e) => setAttendeePick(e.target.value)} className="flex-1 min-w-0">
                 <option value="">그룹 또는 참석자 선택...</option>
                 {groups.length > 0 && (
                   <optgroup label="그룹 (전원 추가)">
@@ -934,7 +1061,7 @@ export default function MeetingForm({
               </button>
             </div>
             <div className="flex gap-2 mt-2">
-              <input placeholder="새 참석자 이름" value={newPersonName} onChange={(e) => setNewPersonName(e.target.value)} className="flex-1" />
+              <input placeholder="새 참석자 이름" value={newPersonName} onChange={(e) => setNewPersonName(e.target.value)} className="flex-1 min-w-0" />
               <button type="button" onClick={addNewPerson} className="px-3 py-2 border border-[#ddd8ca] bg-white text-sm">
                 새 참석자 추가
               </button>
@@ -952,7 +1079,7 @@ export default function MeetingForm({
                       {activeAttendeeIds.length > 1 ? (
                         <>
                           <label className="text-xs text-[#7a7768]">대상</label>
-                          <select value={s.personId} onChange={(e) => updateStory(s.tempId, { personId: e.target.value })} className="flex-1">
+                          <select value={s.personId} onChange={(e) => updateStory(s.tempId, { personId: e.target.value })} className="flex-1 min-w-0">
                             {activeAttendeeIds.map((id) => (
                               <option key={id} value={id}>
                                 {nameOf(id)}
@@ -1019,7 +1146,11 @@ export default function MeetingForm({
 
       {stops.length > 1 && (
         <p className="text-sm text-[#7a7768]">
-          전체 합계: {stops.reduce((sum, s) => sum + (Number(s.amount) || 0), 0).toLocaleString()}원 ({stops.map((s) => s.label).join(" → ")})
+          전체 합계: {stops.reduce((sum, s) => sum + (Number(s.amount) || 0), 0).toLocaleString()}원
+          {stops.some((s) => STOP_KIND_META[s.kind].settlement && s.settlementMode !== "full") && (
+            <> (내 실제 부담 {stops.reduce((sum, s) => sum + (Number(s.myShare) || Number(s.amount) || 0), 0).toLocaleString()}원)</>
+          )}{" "}
+          ({stops.map((s) => s.label).join(" → ")})
         </p>
       )}
 

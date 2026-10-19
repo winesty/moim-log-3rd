@@ -46,6 +46,8 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
       amount: body.newStop.amount,
       orderedItems: newOrderedItems,
       attendeeIds: body.newStop.attendeeIds ?? previousStop?.attendeeIds ?? existing.attendeeIds,
+      kind: body.newStop.kind ?? "meal",
+      settlementMode: "full",
     };
     stops = [...stops, newStop];
     if (newOrderedItems.length > 0) {

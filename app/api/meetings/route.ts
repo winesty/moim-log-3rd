@@ -36,6 +36,10 @@ export async function POST(req: NextRequest) {
     amount: s.amount,
     orderedItems: (s.orderedItems ?? []).filter((it: OrderedItem) => it.name?.trim() && it.quantity > 0),
     attendeeIds: s.attendeeIds ?? [],
+    kind: s.kind ?? "meal",
+    settlementMode: s.settlementMode ?? "full",
+    splitCount: s.splitCount,
+    myShare: s.myShare,
   }));
 
   // 모임 전체 참석자는 차수별 참석자를 합친 값. 클라이언트가 계산해서 보내주지만, 혹시 빠졌으면 여기서도 한 번 더 합친다.

@@ -30,6 +30,10 @@ export default async function EditMeetingPage({ params }: { params: { id: string
       // 차수 구분이 생기기 전 기록은 attendeeIds가 없으니, 그때는 모임 전체 참석자를 그대로 넣어둔다.
       // (실제로 차수마다 인원이 달랐던 옛 모임은 편집 화면에서 차수별로 체크를 빼주셔야 정확해져요.)
       attendeeIds: s.attendeeIds ?? meeting.attendeeIds,
+      kind: s.kind,
+      settlementMode: s.settlementMode,
+      splitCount: s.splitCount,
+      myShare: s.myShare,
     })),
     stories: meeting.stories.map((s) => ({
       id: s.id,
